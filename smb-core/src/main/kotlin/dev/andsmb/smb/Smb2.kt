@@ -1,6 +1,7 @@
 package dev.andsmb.smb
 
 import java.io.File
+import java.net.InetAddress
 
 data class SmbShare(val name: String, val root: File, val readOnly: Boolean = false, val comment: String = "")
 
@@ -19,6 +20,8 @@ data class SmbConfig(
     val authTimeoutMs: Int = 30_000,
     /** 1 フレームの長さを受け取ってから本体を受け取り終えるまでの制限時間 (ミリ秒) */
     val frameTimeoutMs: Int = 30_000,
+    /** 接続を受け付ける相手。既定では LAN 内のアドレスだけ (インターネットからの接続は切る) */
+    val clientFilter: (InetAddress) -> Boolean = LocalAddresses::isLocal,
 )
 
 interface SmbLogger {
@@ -69,6 +72,7 @@ object Status {
     const val OBJECT_PATH_NOT_FOUND = 0xC000003A.toInt()
     const val DELETE_PENDING = 0xC0000056.toInt()
     const val LOGON_FAILURE = 0xC000006D.toInt()
+    const val ACCOUNT_LOCKED_OUT = 0xC0000234.toInt()
     const val DISK_FULL = 0xC000007F.toInt()
     const val FILE_IS_A_DIRECTORY = 0xC00000BA.toInt()
     const val NOT_SUPPORTED = 0xC00000BB.toInt()

@@ -11,6 +11,8 @@ internal class NtlmServer(private val serverName: String, private val users: Map
     class Result(
         val ok: Boolean,
         val user: String = "",
+        /** 名前もパスワードも空の匿名ログイン (Finder が最初に試す)。総当たりの数には入れない */
+        val anonymous: Boolean = false,
         val guest: Boolean = false,
         val sessionKey: ByteArray? = null,
         val flags: Int = 0,
@@ -64,7 +66,7 @@ internal class NtlmServer(private val serverName: String, private val users: Map
         val encKey = field(52)
 
         if (user.isEmpty() && nt.isEmpty()) {
-            return if (allowGuest) Result(true, guest = true) else Result(false)
+            return if (allowGuest) Result(true, guest = true, anonymous = true) else Result(false, anonymous = true)
         }
         val entry = users.entries.firstOrNull { it.key.equals(user, ignoreCase = true) }
         if (entry == null) {

@@ -147,7 +147,7 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     var portText by remember { mutableStateOf(settings.port.toString()) }
     var fieldError by remember { mutableStateOf<Pair<Settings.Field, String>?>(null) }
     var storageOk by remember { mutableStateOf(hasStorageAccess(ctx)) }
-    var ips by remember { mutableStateOf(SmbService.ipAddresses()) }
+    var ips by remember { mutableStateOf(SmbService.ipAddresses(ctx)) }
     var tab by rememberSaveable { mutableStateOf(Tab.SERVER) }
 
     // 設定画面から戻ってきたら権限と IP を再確認する
@@ -156,14 +156,14 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
         val obs = LifecycleEventObserver { _, e ->
             if (e == Lifecycle.Event.ON_RESUME) {
                 storageOk = hasStorageAccess(ctx)
-                ips = SmbService.ipAddresses()
+                ips = SmbService.ipAddresses(ctx)
                 Traffic.load(ctx)
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
-    LaunchedEffect(state.running) { ips = SmbService.ipAddresses() }
+    LaunchedEffect(state.running) { ips = SmbService.ipAddresses(ctx) }
 
     val legacyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         storageOk = hasStorageAccess(ctx)

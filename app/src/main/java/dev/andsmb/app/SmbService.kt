@@ -8,6 +8,11 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
@@ -25,7 +30,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
 import java.net.Inet4Address
-import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,23 +66,32 @@ class SmbService : Service() {
             ctx.stopService(Intent(ctx, SmbService::class.java))
         }
 
-        /** 端末の IPv4 アドレス一覧 (Wi-Fi・テザリングなど) */
-        fun ipAddresses(): List<String> = try {
-            NetworkInterface.getNetworkInterfaces().toList()
-                .filter { it.isUp && !it.isLoopback }
-                .flatMap { it.inetAddresses.toList() }
-                .filterIsInstance<Inet4Address>()
-                .map { it.hostAddress ?: "" }
-                .filter { it.isNotEmpty() }
-        } catch (e: Exception) {
-            emptyList()
+        /** サーバーを公開してよいネットワーク: Wi-Fi と有線 LAN (モバイルデータ・VPN は対象外) */
+        private fun isLan(caps: NetworkCapabilities?) = caps != null &&
+            (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) &&
+            !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+
+        private fun ipv4(lp: LinkProperties?): Inet4Address? =
+            lp?.linkAddresses?.map { it.address }?.filterIsInstance<Inet4Address>()?.firstOrNull { !it.isLoopbackAddress }
+
+        /** 接続中の Wi-Fi (または有線 LAN) と、その IPv4 アドレス */
+        fun lanAddress(ctx: Context): Pair<Network, Inet4Address>? {
+            val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null
+            @Suppress("DEPRECATION")
+            return cm.allNetworks.firstNotNullOfOrNull { n ->
+                if (!isLan(cm.getNetworkCapabilities(n))) null else ipv4(cm.getLinkProperties(n))?.let { n to it }
+            }
         }
+
+        /** 接続に使うアドレス (Wi-Fi の IPv4)。Wi-Fi につながっていなければ空 */
+        fun ipAddresses(ctx: Context): List<String> = listOfNotNull(lanAddress(ctx)?.second?.hostAddress)
     }
 
     private var server: SmbServer? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var nsdListener: NsdManager.RegistrationListener? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val handler = Handler(Looper.getMainLooper())
     private var lastReceived = 0L
     private var lastSent = 0L
@@ -122,7 +135,7 @@ class SmbService : Service() {
         val stop = PendingIntent.getService(
             this, 1, Intent(this, SmbService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
         )
-        val ip = ipAddresses().firstOrNull() ?: "?"
+        val ip = ipAddresses(this).firstOrNull() ?: "?"
         val n = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("SMB サーバー実行中")
@@ -148,7 +161,17 @@ class SmbService : Service() {
                 Log.e(TAG, msg, t); appendLog("ERROR: $msg${t?.let { " (${it.javaClass.simpleName}: ${it.message})" } ?: ""}")
             }
         }
+        // Wi-Fi のアドレスだけで待ち受ける (モバイルデータや VPN 側からは届かない)
+        val lan = lanAddress(this)
+        if (lan == null) {
+            appendLog("Wi-Fi に接続されていないため開始できません")
+            _state.value = State(running = false, error = "Wi-Fi に接続してから開始してください")
+            stopSelf()
+            return
+        }
+        val (network, address) = lan
         val config = SmbConfig(
+            bindAddress = address.hostAddress,
             port = s.port,
             serverName = (Build.MODEL ?: "ANDROID").filter { it.isLetterOrDigit() }.take(15).ifEmpty { "ANDROID" }.uppercase(),
             shares = listOf(SmbShare(s.shareName, File(s.path), s.readOnly, "Android storage")),
@@ -160,6 +183,7 @@ class SmbService : Service() {
             server = srv
             acquireLocks()
             registerNsd(config.serverName, s.port)
+            watchNetwork(network, address)
             _state.value = State(running = true, port = s.port)
             lastReceived = 0; lastSent = 0
             handler.post(trafficTick)
@@ -177,6 +201,31 @@ class SmbService : Service() {
         wifiLock = wm.createWifiLock(mode, "AndSmb").apply { setReferenceCounted(false); acquire() }
         val pm = getSystemService(PowerManager::class.java)
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AndSmb:server").apply { setReferenceCounted(false); acquire() }
+    }
+
+    /** 待ち受けている Wi-Fi が切れたりアドレスが変わったりしたら、サーバーを止める */
+    private fun watchNetwork(network: Network, address: Inet4Address) {
+        fun stopFor(reason: String) = handler.post {
+            if (server == null) return@post
+            appendLog(reason)
+            _state.value = _state.value.copy(error = reason)
+            stopSelf()
+        }
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(n: Network) {
+                if (n == network) stopFor("Wi-Fi が切断されたため停止しました")
+            }
+
+            override fun onLinkPropertiesChanged(n: Network, lp: LinkProperties) {
+                if (n == network && lp.linkAddresses.none { it.address == address }) stopFor("IP アドレスが変わったため停止しました")
+            }
+        }
+        val req = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+            .build()
+        getSystemService(ConnectivityManager::class.java).registerNetworkCallback(req, cb)
+        networkCallback = cb
     }
 
     /** Bonjour (_smb._tcp) で公開して Mac の Finder サイドバーに出るようにする */
@@ -208,6 +257,10 @@ class SmbService : Service() {
             try { getSystemService(NsdManager::class.java).unregisterService(l) } catch (_: Exception) {}
         }
         nsdListener = null
+        networkCallback?.let { cb ->
+            try { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(cb) } catch (_: Exception) {}
+        }
+        networkCallback = null
         server?.stop()
         server = null
         wifiLock?.release()

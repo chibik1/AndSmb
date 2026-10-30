@@ -15,6 +15,9 @@ data class Settings(
     companion object {
         private const val PREFS = "settings"
 
+        /** 総当たりされにくくするための最低文字数 */
+        const val MIN_PASSWORD = 8
+
         fun load(ctx: Context): Settings {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             // 初回起動時はランダムなパスワードを作って保存しておく
@@ -53,7 +56,7 @@ data class Settings(
     fun validate(): Pair<Field, String>? = when {
         shareName.isBlank() || shareName.any { it in "\\/:*?\"<>|" } -> Field.SHARE to "共有名に使えない文字が含まれています"
         user.isBlank() -> Field.USER to "ユーザー名を入力してください"
-        password.length < 4 -> Field.PASSWORD to "パスワードは4文字以上にしてください"
+        password.length < MIN_PASSWORD -> Field.PASSWORD to "パスワードは${MIN_PASSWORD}文字以上にしてください"
         port !in 1024..65535 -> Field.PORT to "1024〜65535 の番号にしてください"
         else -> null
     }

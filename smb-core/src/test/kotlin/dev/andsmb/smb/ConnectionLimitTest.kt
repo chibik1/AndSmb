@@ -92,6 +92,27 @@ class ConnectionLimitTest {
         }
     }
 
+    @Test fun nonLocalClientIsRejected() {
+        // 接続元を「LAN の外」と判定するサーバーには、つないだ途端に切られる
+        val strict = SmbServer(
+            SmbConfig(port = 0, bindAddress = "127.0.0.1", shares = listOf(SmbShare("s", dir)), users = mapOf("u" to "p"),
+                clientFilter = { false }),
+            quiet,
+        )
+        strict.start()
+        try {
+            Socket("127.0.0.1", strict.localPort).use { s ->
+                s.soTimeout = 5000
+                val t0 = System.nanoTime()
+                assertTrue(closedByServer(s))
+                assertTrue((System.nanoTime() - t0) / 1_000_000 < 500)
+            }
+            assertEquals(0, strict.connectionCount)
+        } finally {
+            strict.stop()
+        }
+    }
+
     @Test fun slotIsFreedAfterTimeout() {
         List(3) { connect() }.forEach { closedByServer(it); it.close() }
         Thread.sleep(200)

@@ -28,6 +28,9 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
     /** パスごとに安定した FileId (FileInternalInformation) を割り当てる */
     internal fun fileId(path: String): Long = fileIds.computeIfAbsent(path) { nextFileId.getAndIncrement() }
 
+    /** 認証失敗の数え上げ (接続をまたいで IP ごと) */
+    internal val authThrottle = AuthThrottle()
+
     /** true にするとコマンドごとの結果をログに出す */
     var debug = System.getenv("SMB_DEBUG") != null
 
@@ -52,6 +55,12 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
         acceptThread = Thread({
             while (!ss.isClosed) {
                 val s: Socket = try { ss.accept() } catch (e: IOException) { break }
+                // LAN の外からの接続は受け付けない
+                if (!config.clientFilter(s.inetAddress)) {
+                    log.info("non-local client, rejected: ${s.inetAddress.hostAddress}")
+                    try { s.close() } catch (_: IOException) {}
+                    continue
+                }
                 // 上限を超えた接続はスレッドを作らずにすぐ切る
                 if (connections.size >= config.maxConnections) {
                     log.info("too many connections, rejected: ${s.inetAddress.hostAddress}")
@@ -513,7 +522,15 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
                 return moreProcessing(if (tok.wrapped) Spnego.response(1, ch, null, true) else ch)
             }
             3 -> {
-                val res = session.ntlm.authenticate(ntlm!!)
+                val res = server.authThrottle.attempt(socket.inetAddress, { r: NtlmServer.Result -> !r.ok && !r.anonymous }) {
+                    session.ntlm.authenticate(ntlm!!)
+                }
+                if (res == null) {
+                    sessions.remove(session.id)
+                    val sec = (server.authThrottle.lockedFor(socket.inetAddress) + 999) / 1000
+                    log.info("$peer locked out after repeated logon failures (${sec}s left)")
+                    return error(Status.ACCOUNT_LOCKED_OUT).also { it.sessionId = session.id }
+                }
                 if (!res.ok) {
                     sessions.remove(session.id)
                     log.info("$peer logon failure")
