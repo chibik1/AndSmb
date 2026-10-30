@@ -31,6 +31,7 @@
     <string name="no_network">ネットワークに接続されていません</string>
     <string name="connect_wifi">Wi-Fi に接続してください。</string>
     <string name="address_mac">Mac / iPhone (Finder・ファイル):</string>
+    <string name="address_ip">IP アドレスで接続 (上でつながらないとき):</string>
     <string name="address_windows">Windows 11 24H2 以降 (コマンドプロンプト):</string>
 
     <!-- Permission notice -->

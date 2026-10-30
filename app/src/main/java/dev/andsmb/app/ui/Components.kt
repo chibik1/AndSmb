@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -262,10 +263,10 @@ fun ToggleRow(label: String, icon: ImageVector, checked: Boolean, onChange: (Boo
 
 /** 情報チップ (押せない)。状態の要約を短く並べる。 */
 @Composable
-fun InfoChip(text: String, icon: ImageVector, tint: Color = colors.inkMuted) {
+fun InfoChip(text: String, icon: ImageVector, tint: Color = colors.inkMuted, modifier: Modifier = Modifier) {
     val c = colors
     Row(
-        Modifier
+        modifier
             .height(32.dp)
             .clip(CircleShape)
             .background(c.surfaceTile)
@@ -274,7 +275,7 @@ fun InfoChip(text: String, icon: ImageVector, tint: Color = colors.inkMuted) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         FIcon(icon, tint, 16.dp)
-        Text(text, style = Type.bodySm.copy(fontWeight = FontWeight(500)), color = c.ink)
+        Text(text, style = Type.bodySm.copy(fontWeight = FontWeight(500)), color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

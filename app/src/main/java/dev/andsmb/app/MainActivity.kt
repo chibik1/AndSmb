@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Traffic.load(this)
+        SmbService.initLog(this)
         val prefs = getSharedPreferences("ui", MODE_PRIVATE)
         setContent {
             var mode by remember {
@@ -333,7 +334,6 @@ private fun PermissionNotice(onAllow: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, connections: Int, onCopy: (String) -> Unit) {
     val c = colors
@@ -341,7 +341,9 @@ private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, 
         if (state.running) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                 FIcon(Feather.checkCircle, c.success)
-                Text(stringResource(R.string.status_running), style = Type.headline, color = c.success)
+                Text(stringResource(R.string.status_running), style = Type.headline, color = c.success, modifier = Modifier.weight(1f))
+                // 台数は見出しの右端に置き、増減で下のチップ列が押し出されないようにする
+                InfoChip(pluralStringResource(R.plurals.chip_connections, connections, connections), Feather.users)
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
@@ -350,12 +352,12 @@ private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, 
             }
         }
 
-        // 状態のチップ: 接続台数・書き込み可否・ポート
+        // 状態のチップ: 書き込み可否・ポート
         Spacer(Modifier.height(Space.s3))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
-            if (state.running) InfoChip(pluralStringResource(R.plurals.chip_connections, connections, connections), Feather.users)
-            InfoChip(stringResource(if (s.readOnly) R.string.chip_read_only else R.string.chip_read_write), if (s.readOnly) Feather.eye else Feather.folder)
-            InfoChip(stringResource(R.string.chip_port, if (state.running) state.port else s.port), Feather.hash)
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+            val fit = Modifier.weight(1f, fill = false)
+            InfoChip(stringResource(if (s.readOnly) R.string.chip_read_only else R.string.chip_read_write), if (s.readOnly) Feather.eye else Feather.folder, modifier = fit)
+            InfoChip(stringResource(R.string.chip_port, if (state.running) state.port else s.port), Feather.hash, modifier = fit)
         }
 
         if (ips.isEmpty()) {
@@ -368,8 +370,13 @@ private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, 
             Text(stringResource(R.string.connect_wifi), style = Type.body, color = c.ink)
         }
         val port = if (state.running) state.port else s.port
+        // Bonjour 名で接続すると、Finder の「ネットワーク」で公開名と同じ 1 項目にまとまる
+        val bonjour = state.bonjourName?.takeIf { state.running }
+        if (bonjour != null && ips.isNotEmpty()) {
+            Address(stringResource(R.string.address_mac), "smb://${Uri.encode(bonjour)}._smb._tcp.local/${s.shareName}", onCopy)
+        }
         for (ip in ips) {
-            Address(stringResource(R.string.address_mac), "smb://$ip:$port/${s.shareName}", onCopy)
+            Address(stringResource(if (bonjour != null) R.string.address_ip else R.string.address_mac), "smb://$ip:$port/${s.shareName}", onCopy)
             Address(stringResource(R.string.address_windows), "net use Z: \\\\$ip\\${s.shareName} /TCPPORT:$port /USER:${s.user}", onCopy)
         }
     }

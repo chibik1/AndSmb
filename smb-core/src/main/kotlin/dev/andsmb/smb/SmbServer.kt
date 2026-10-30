@@ -135,6 +135,13 @@ private const val MAX_FRAME = (1 shl 20) + 65536
 /** 認証前に受け付ける最大フレーム長。NEGOTIATE / SESSION_SETUP はこれで十分足りる */
 private const val MAX_FRAME_UNAUTH = 65536
 
+/** 普段の操作でも返るのでエラーとして記録しない状態コード (認証失敗は別に記録する) */
+private val QUIET_STATUSES = setOf(
+    Status.SUCCESS, Status.MORE_PROCESSING_REQUIRED, Status.NO_MORE_FILES, Status.BUFFER_OVERFLOW, Status.END_OF_FILE,
+    Status.OBJECT_NAME_NOT_FOUND, Status.OBJECT_PATH_NOT_FOUND, Status.NO_SUCH_FILE, Status.OBJECT_NAME_COLLISION,
+    Status.LOGON_FAILURE, Status.ACCOUNT_LOCKED_OUT,
+)
+
 internal class SmbConnection(private val server: SmbServer, private val socket: Socket) {
     private val config = server.config
     private val log = server.log
@@ -156,7 +163,14 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
 
     private val out = socket.getOutputStream().buffered(1 shl 16)
 
+    /** こちらから切ったか (切断理由のログ用) */
+    @Volatile private var closed = false
+
+    /** 直近のコマンドとその結果 (切断理由のログ用) */
+    private var lastCommand: String? = null
+
     fun close() {
+        closed = true
         try { socket.close() } catch (_: IOException) {}
     }
 
@@ -168,6 +182,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
         val input = socket.getInputStream().buffered(1 shl 16)
         val hdr = ByteArray(4)
         var authDeadline = System.nanoTime() + config.authTimeoutMs * 1_000_000L
+        var reason = "closed by client"
         try {
             while (true) {
                 val auth = authenticated
@@ -177,28 +192,31 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
                 if (!readFully(input, hdr, if (auth) 0L else authDeadline)) break
                 val len = (hdr.u8(1) shl 16) or (hdr.u8(2) shl 8) or hdr.u8(3)
                 val maxLen = if (auth) MAX_FRAME else MAX_FRAME_UNAUTH
-                if (len > maxLen) { log.info("frame too large ($len bytes), closing: $peer"); break }
+                if (len > maxLen) { reason = "frame too large ($len bytes)"; break }
                 // 長さを受け取ったら、本体は一定時間内に届き終えなければならない
                 val frameDeadline = System.nanoTime() + config.frameTimeoutMs * 1_000_000L
                 val deadline = if (auth) frameDeadline else minOf(frameDeadline, authDeadline)
                 if (hdr[0].toInt() != 0) { if (!skipFully(input, len, deadline)) break; continue } // NetBIOS keepalive 等
-                if (len < 4) break
+                if (len < 4) { reason = "frame too short"; break }
                 val data = ByteArray(len)
                 if (!readFully(input, data, deadline)) break
                 server.bytesReceived.addAndGet(4L + len)
                 handleFrame(data)
             }
         } catch (e: SocketTimeoutException) {
-            log.info("timed out: $peer")
+            reason = if (authenticated) "timed out" else "timed out before logon"
         } catch (e: SocketException) {
-            // 切断
+            if (!closed) reason = "connection lost (${e.message})"
         } catch (e: Exception) {
+            reason = "error"
             log.error("connection error ($peer)", e)
         } finally {
             opens.values.forEach { closeOpen(it) }
             opens.clear()
+            if (closed && reason == "closed by client") reason = "closed by server"
             close()
-            log.info("disconnected: $peer")
+            // 切れる直前に何をしていたかで原因が絞れる
+            log.info("disconnected: $peer ($reason${lastCommand?.let { ", last: $it" } ?: ""})")
         }
     }
 
@@ -286,6 +304,8 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
             }
             if (req.command == Cmd.CANCEL) { if (next == 0) break else { off += next; continue } }
             if (server.debug) log.info("$peer cmd=${req.command} mid=${req.messageId} -> ${"%08x".format(resp.status)} (${resp.body.size}b)")
+            lastCommand = "${Cmd.name(req.command)} -> ${"%08x".format(resp.status)}"
+            if (resp.status !in QUIET_STATUSES) log.error("$peer ${Cmd.name(req.command)} failed: ${"%08x".format(resp.status)}")
             val msg = build(req, resp)
             val sid = resp.sessionId ?: req.sessionId
             val signSession = sessions[sid]?.takeIf { it.signingKey != null && (req.signed || resp.forceSign) }
@@ -528,12 +548,12 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
                 if (res == null) {
                     sessions.remove(session.id)
                     val sec = (server.authThrottle.lockedFor(socket.inetAddress) + 999) / 1000
-                    log.info("$peer locked out after repeated logon failures (${sec}s left)")
+                    log.error("$peer locked out after repeated logon failures (${sec}s left)")
                     return error(Status.ACCOUNT_LOCKED_OUT).also { it.sessionId = session.id }
                 }
                 if (!res.ok) {
                     sessions.remove(session.id)
-                    log.info("$peer logon failure")
+                    log.error("$peer logon failure: user '${res.user}' (${res.reason})")
                     return error(Status.LOGON_FAILURE).also { it.sessionId = session.id }
                 }
                 session.user = res.user

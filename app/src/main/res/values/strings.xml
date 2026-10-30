@@ -34,6 +34,7 @@
     <string name="no_network">Not connected to a network</string>
     <string name="connect_wifi">Please connect to Wi-Fi.</string>
     <string name="address_mac">Mac / iPhone (Finder / Files):</string>
+    <string name="address_ip">By IP address (if the above doesn\'t work):</string>
     <string name="address_windows">Windows 11 24H2 or later (Command Prompt):</string>
 
     <!-- Permission notice -->

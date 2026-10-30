@@ -37,7 +37,13 @@ import java.util.Locale
 /** SMB サーバーを動かし続けるフォアグラウンドサービス。 */
 class SmbService : Service() {
 
-    data class State(val running: Boolean = false, val error: String? = null, val port: Int = 0)
+    data class State(
+        val running: Boolean = false,
+        val error: String? = null,
+        val port: Int = 0,
+        /** Bonjour で公開できた名前 (同名の機器がいると "PIXEL4A (2)" のように変わる) */
+        val bonjourName: String? = null,
+    )
 
     companion object {
         private const val TAG = "AndSmb"
@@ -50,11 +56,34 @@ class SmbService : Service() {
         private val _log = MutableStateFlow<List<String>>(emptyList())
         val log: StateFlow<List<String>> = _log
 
-        private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+        private val timeFmt = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
 
+        /** ログはファイルにも残し、アプリを閉じても後から原因を追えるようにする */
+        private var logFile: File? = null
+        private const val LOG_MAX_BYTES = 512 * 1024
+
+        /** ログファイルを決めて、前回までの末尾を画面用に読み込む */
+        @Synchronized
+        fun initLog(ctx: Context) {
+            if (logFile != null) return
+            val f = File(ctx.filesDir, "log.txt")
+            logFile = f
+            val old = try { if (f.exists()) f.readLines().takeLast(200) else emptyList() } catch (e: Exception) { emptyList() }
+            _log.value = (old + _log.value).takeLast(200)
+        }
+
+        @Synchronized
         fun appendLog(line: String) {
             val l = "${timeFmt.format(Date())} $line"
             _log.value = (_log.value + l).takeLast(200)
+            val f = logFile ?: return
+            try {
+                // 大きくなったら 1 世代だけ残して作り直す
+                if (f.length() > LOG_MAX_BYTES) f.renameTo(File(f.parentFile, "log.1.txt"))
+                f.appendText(l + "\n")
+            } catch (e: Exception) {
+                Log.w(TAG, "log write failed", e)
+            }
         }
 
         fun start(ctx: Context) {
@@ -116,6 +145,7 @@ class SmbService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        initLog(this)
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
@@ -182,9 +212,9 @@ class SmbService : Service() {
             srv.start()
             server = srv
             acquireLocks()
+            _state.value = State(running = true, port = s.port)
             registerNsd(config.serverName, s.port)
             watchNetwork(network, address)
-            _state.value = State(running = true, port = s.port)
             lastReceived = 0; lastSent = 0
             handler.post(trafficTick)
         } catch (e: Exception) {
@@ -236,7 +266,10 @@ class SmbService : Service() {
             this.port = port
         }
         val listener = object : NsdManager.RegistrationListener {
-            override fun onServiceRegistered(info: NsdServiceInfo) = appendLog(getString(R.string.log_bonjour_ok, info.serviceName))
+            override fun onServiceRegistered(info: NsdServiceInfo) {
+                appendLog(getString(R.string.log_bonjour_ok, info.serviceName))
+                handler.post { if (server != null) _state.value = _state.value.copy(bonjourName = info.serviceName) }
+            }
             override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) = appendLog(getString(R.string.log_bonjour_fail, code))
             override fun onServiceUnregistered(info: NsdServiceInfo) {}
             override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {}
