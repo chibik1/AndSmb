@@ -49,12 +49,14 @@ data class Settings(
         }
     }
 
-    /** 設定の妥当性チェック。問題があればエラーメッセージを返す。 */
-    fun validate(): String? = when {
-        shareName.isBlank() || shareName.any { it in "\\/:*?\"<>|" } -> "共有名に使えない文字が含まれています"
-        user.isBlank() -> "ユーザー名を入力してください"
-        password.length < 4 -> "パスワードは4文字以上にしてください"
-        port !in 1024..65535 -> "ポートは 1024〜65535 の範囲で指定してください"
+    /** 設定の妥当性チェック。問題があれば (項目, メッセージ) を返す。 */
+    fun validate(): Pair<Field, String>? = when {
+        shareName.isBlank() || shareName.any { it in "\\/:*?\"<>|" } -> Field.SHARE to "共有名に使えない文字が含まれています"
+        user.isBlank() -> Field.USER to "ユーザー名を入力してください"
+        password.length < 4 -> Field.PASSWORD to "パスワードは4文字以上にしてください"
+        port !in 1024..65535 -> Field.PORT to "1024〜65535 の番号にしてください"
         else -> null
     }
+
+    enum class Field { SHARE, PATH, USER, PASSWORD, PORT }
 }

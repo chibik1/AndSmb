@@ -30,6 +30,10 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
     /** true にするとコマンドごとの結果をログに出す */
     var debug = System.getenv("SMB_DEBUG") != null
 
+    /** 起動してからの受信・送信バイト数 (SMB のフレーム単位で数える) */
+    val bytesReceived = AtomicLong()
+    val bytesSent = AtomicLong()
+
     val isRunning: Boolean get() = serverSocket?.isClosed == false
     val connectionCount: Int get() = connections.size
 
@@ -143,6 +147,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
                 if (len < 4 || len > 16 * 1024 * 1024) break
                 val data = ByteArray(len)
                 if (!readFully(input, data)) break
+                server.bytesReceived.addAndGet(4L + len)
                 handleFrame(data)
             }
         } catch (e: SocketException) {
@@ -172,6 +177,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
         out.write(byteArrayOf(0, (total ushr 16).toByte(), (total ushr 8).toByte(), total.toByte()))
         msgs.forEach { out.write(it) }
         out.flush()
+        server.bytesSent.addAndGet(4L + total)
     }
 
     private fun handleFrame(data: ByteArray) {

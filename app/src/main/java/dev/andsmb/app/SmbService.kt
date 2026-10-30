@@ -12,7 +12,9 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import dev.andsmb.smb.SmbConfig
@@ -77,6 +79,26 @@ class SmbService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var nsdListener: NsdManager.RegistrationListener? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastReceived = 0L
+    private var lastSent = 0L
+
+    /** 2秒ごとにサーバーの通信量を読み、日ごとの記録に足す */
+    private val trafficTick = object : Runnable {
+        override fun run() {
+            flushTraffic()
+            handler.postDelayed(this, 2000)
+        }
+    }
+
+    private fun flushTraffic() {
+        val srv = server ?: return
+        val rx = srv.bytesReceived.get()
+        val tx = srv.bytesSent.get()
+        Traffic.record(this, rx - lastReceived, tx - lastSent, rx, tx, srv.connectionCount)
+        lastReceived = rx
+        lastSent = tx
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -139,6 +161,8 @@ class SmbService : Service() {
             acquireLocks()
             registerNsd(config.serverName, s.port)
             _state.value = State(running = true, port = s.port)
+            lastReceived = 0; lastSent = 0
+            handler.post(trafficTick)
         } catch (e: Exception) {
             logger.error("起動に失敗しました", e)
             _state.value = State(running = false, error = e.message ?: e.javaClass.simpleName)
@@ -177,6 +201,9 @@ class SmbService : Service() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(trafficTick)
+        flushTraffic()
+        Traffic.stopped(this)
         nsdListener?.let { l ->
             try { getSystemService(NsdManager::class.java).unregisterService(l) } catch (_: Exception) {}
         }
