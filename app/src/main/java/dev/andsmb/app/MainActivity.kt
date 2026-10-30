@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.heightIn
@@ -146,6 +147,7 @@ private enum class Tab(@StringRes val label: Int) { SERVER(R.string.tab_server),
 @Composable
 private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     val ctx = LocalContext.current
+    val res = LocalResources.current
     val c = colors
     val state by SmbService.state.collectAsState()
     val log by SmbService.log.collectAsState()
@@ -179,7 +181,7 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             val path = treeUriToPath(uri)
-            if (path == null) fieldError = Settings.Field.PATH to ctx.getString(R.string.err_folder_internal_only)
+            if (path == null) fieldError = Settings.Field.PATH to res.getString(R.string.err_folder_internal_only)
             else { settings = settings.copy(path = path); fieldError = null }
         }
     }
@@ -197,7 +199,7 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
 
     fun startServer() {
         val s = settings.copy(port = portText.toIntOrNull() ?: -1)
-        val err = s.validate(ctx) ?: if (!java.io.File(s.path).isDirectory) Settings.Field.PATH to ctx.getString(R.string.err_folder_not_found) else null
+        val err = s.validate(ctx) ?: if (!java.io.File(s.path).isDirectory) Settings.Field.PATH to res.getString(R.string.err_folder_not_found) else null
         fieldError = err
         if (err != null) return
         settings = s
