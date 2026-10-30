@@ -1,0 +1,86 @@
+<resources>
+    <!-- Tabs -->
+    <string name="tab_server">サーバー</string>
+    <string name="tab_traffic">通信量</string>
+    <string name="tab_log">ログ</string>
+
+    <!-- Theme button -->
+    <string name="theme_auto">自動</string>
+    <string name="theme_light">ライト</string>
+    <string name="theme_dark">ダーク</string>
+    <string name="theme_content_desc">テーマ: %1$s</string>
+    <string name="theme_switch">テーマを切り替え</string>
+
+    <!-- Common -->
+    <string name="error_prefix">エラー: %1$s</string>
+    <string name="copied">コピーしました</string>
+    <string name="copy_address">アドレスをコピー</string>
+
+    <!-- Server tab -->
+    <string name="server_start">サーバー開始</string>
+    <string name="server_stop">サーバー停止</string>
+    <string name="section_settings">設定</string>
+    <string name="status_running">実行中</string>
+    <string name="status_stopped">停止中</string>
+    <plurals name="chip_connections">
+        <item quantity="other">接続 %1$d 台</item>
+    </plurals>
+    <string name="chip_no_connections">接続なし</string>
+    <string name="chip_read_only">読み取り専用</string>
+    <string name="chip_read_write">読み書き</string>
+    <string name="chip_port">ポート %1$d</string>
+    <string name="no_network">ネットワークに接続されていません</string>
+    <string name="connect_wifi">Wi-Fi に接続してください。</string>
+    <string name="address_mac">Mac / iPhone (Finder・ファイル):</string>
+    <string name="address_windows">Windows 11 24H2 以降 (コマンドプロンプト):</string>
+
+    <!-- Permission notice -->
+    <string name="permission_title">ストレージへのアクセス許可が必要です</string>
+    <string name="permission_body">共有するファイルを読み書きするため「すべてのファイルへのアクセス」を許可してください。</string>
+    <string name="permission_allow">許可する</string>
+
+    <!-- Settings fields -->
+    <string name="field_share_name">共有名</string>
+    <string name="field_folder">共有フォルダ</string>
+    <string name="field_choose">選択</string>
+    <string name="field_user">ユーザー名</string>
+    <string name="field_password">パスワード</string>
+    <string name="field_port">ポート (1024〜65535)</string>
+    <string name="toggle_read_only">読み取り専用</string>
+    <string name="password_show">パスワードを表示</string>
+    <string name="password_hide">パスワードを隠す</string>
+
+    <!-- Validation -->
+    <string name="err_share_invalid">共有名に使えない文字が含まれています</string>
+    <string name="err_user_required">ユーザー名を入力してください</string>
+    <string name="err_password_short">パスワードは%1$d文字以上にしてください</string>
+    <string name="err_port_range">1024〜65535 の番号にしてください</string>
+    <string name="err_folder_internal_only">内部ストレージのフォルダを選んでください (SD カードは未対応)</string>
+    <string name="err_folder_not_found">フォルダが見つかりません</string>
+
+    <!-- Traffic tab -->
+    <string name="today">今日</string>
+    <string name="received">受信</string>
+    <string name="sent">送信</string>
+    <string name="since_start">起動してから  受信 %1$s ・ 送信 %2$s</string>
+    <string name="metric_total">合計</string>
+    <string name="last_7_days">直近7日</string>
+    <string name="week_total">計 %1$s</string>
+    <string name="traffic_empty">まだデータがありません</string>
+
+    <!-- Log tab -->
+    <string name="log_empty_title">ログはまだありません</string>
+    <string name="log_empty_body">サーバーを開始すると、接続や操作の記録がここに表示されます。</string>
+
+    <!-- Service: notification and log lines -->
+    <string name="notif_channel">SMB サーバー</string>
+    <string name="notif_title">SMB サーバー実行中</string>
+    <string name="notif_stop">停止</string>
+    <string name="log_no_wifi">Wi-Fi に接続されていないため開始できません</string>
+    <string name="err_connect_wifi_first">Wi-Fi に接続してから開始してください</string>
+    <string name="log_start_failed">起動に失敗しました</string>
+    <string name="stopped_wifi_lost">Wi-Fi が切断されたため停止しました</string>
+    <string name="stopped_ip_changed">IP アドレスが変わったため停止しました</string>
+    <string name="log_bonjour_ok">Bonjour 公開: %1$s</string>
+    <string name="log_bonjour_fail">Bonjour 公開失敗 (%1$d)</string>
+</resources>

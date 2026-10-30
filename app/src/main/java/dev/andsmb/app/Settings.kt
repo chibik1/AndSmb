@@ -52,12 +52,12 @@ data class Settings(
         }
     }
 
-    /** 設定の妥当性チェック。問題があれば (項目, メッセージ) を返す。 */
-    fun validate(): Pair<Field, String>? = when {
-        shareName.isBlank() || shareName.any { it in "\\/:*?\"<>|" } -> Field.SHARE to "共有名に使えない文字が含まれています"
-        user.isBlank() -> Field.USER to "ユーザー名を入力してください"
-        password.length < MIN_PASSWORD -> Field.PASSWORD to "パスワードは${MIN_PASSWORD}文字以上にしてください"
-        port !in 1024..65535 -> Field.PORT to "1024〜65535 の番号にしてください"
+    /** 設定の妥当性チェック。問題があれば (項目, 端末の言語のメッセージ) を返す。 */
+    fun validate(ctx: Context): Pair<Field, String>? = when {
+        shareName.isBlank() || shareName.any { it in "\\/:*?\"<>|" } -> Field.SHARE to ctx.getString(R.string.err_share_invalid)
+        user.isBlank() -> Field.USER to ctx.getString(R.string.err_user_required)
+        password.length < MIN_PASSWORD -> Field.PASSWORD to ctx.getString(R.string.err_password_short, MIN_PASSWORD)
+        port !in 1024..65535 -> Field.PORT to ctx.getString(R.string.err_port_range)
         else -> null
     }
 

@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,13 +49,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.andsmb.app.R
 
 /** フォーカスリング: 2dp 実線、要素から 2dp 外側。レイアウトをずらさないよう外側に描く。 */
 fun Modifier.focusRing(focused: Boolean, color: Color, radius: Dp): Modifier = drawWithContent {
@@ -132,13 +139,16 @@ fun PrimaryButton(text: String, icon: ImageVector, onClick: () -> Unit, enabled:
 @Composable
 fun SecondaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
     val c = colors
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
     Box(
         modifier
             .height(48.dp)
+            .focusRing(focused, c.focusRing, 24.dp)
             .alpha(if (enabled) 1f else 0.4f)
             .clip(CircleShape)
             .border(1.5.dp, c.borderField, CircleShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, interactionSource = source, indication = androidx.compose.material3.ripple(color = c.ink), role = Role.Button, onClick = onClick)
             .padding(horizontal = Space.s5),
         contentAlignment = Alignment.Center,
     ) { Text(text, style = Type.label, color = c.ink) }
@@ -154,12 +164,14 @@ fun LabeledField(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     error: String? = null,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+    password: Boolean = false,
 ) {
     val c = colors
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
     val shape = RoundedCornerShape(Radius.md)
+    var revealed by remember { mutableStateOf(false) }
     Column(modifier) {
         Text(label, style = Type.bodySm, color = c.inkMuted)
         Spacer(Modifier.height(Space.s1))
@@ -172,7 +184,7 @@ fun LabeledField(
                 .clip(shape)
                 .background(c.surfaceRaised)
                 .border(1.5.dp, if (error != null) c.danger else c.borderField, shape)
-                .padding(horizontal = Space.s4),
+                .padding(start = Space.s4, end = if (password) Space.s1 else Space.s4),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             FIcon(icon, c.inkMuted)
@@ -185,13 +197,25 @@ fun LabeledField(
                 textStyle = Type.body.copy(color = c.ink),
                 cursorBrush = SolidColor(c.ink),
                 keyboardOptions = keyboardOptions,
+                visualTransformation = if (password && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
                 interactionSource = source,
                 modifier = Modifier.weight(1f),
             )
+            if (password) {
+                val desc = stringResource(if (revealed) R.string.password_hide else R.string.password_show)
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = enabled, role = Role.Button, onClickLabel = desc) { revealed = !revealed }
+                        .semantics { contentDescription = desc },
+                    contentAlignment = Alignment.Center,
+                ) { FIcon(if (revealed) Feather.eyeOff else Feather.eye, c.inkMuted) }
+            }
         }
         if (error != null) {
             Spacer(Modifier.height(Space.s1))
-            Text("エラー: $error", style = Type.caption, color = c.danger)
+            Text(stringResource(R.string.error_prefix, error), style = Type.caption, color = c.danger)
         }
     }
 }
@@ -259,17 +283,27 @@ fun InfoChip(text: String, icon: ImageVector, tint: Color = colors.inkMuted) {
 fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
     val c = colors
     val bg by animateColorAsState(if (selected) c.ink else Color.Transparent, tween(150), label = "chip")
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    // 見た目は 32dp、押せる範囲は 48dp (touch-min)
     Box(
         Modifier
-            .height(32.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .then(if (selected) Modifier else Modifier.border(1.5.dp, c.borderField, CircleShape))
-            .selectable(selected, role = Role.Tab, onClick = onClick)
-            .padding(horizontal = Space.s3 + 2.dp),
+            .heightIn(min = 48.dp)
+            .selectable(selected, interactionSource = source, indication = null, role = Role.Tab, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = Type.bodySm.copy(fontWeight = FontWeight(500)), color = if (selected) c.onInk else c.ink)
+        Box(
+            Modifier
+                .height(32.dp)
+                .focusRing(focused, c.focusRing, 16.dp)
+                .clip(CircleShape)
+                .background(bg)
+                .then(if (selected) Modifier else Modifier.border(1.5.dp, c.borderField, CircleShape))
+                .padding(horizontal = Space.s3 + 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text, style = Type.bodySm.copy(fontWeight = FontWeight(500)), color = if (selected) c.onInk else c.ink)
+        }
     }
 }
 
@@ -286,8 +320,9 @@ fun IconTile(icon: ImageVector, tint: Color = colors.ink) {
 }
 
 /**
- * 7日分の棒グラフ。表紙と同じピル型の棒を、薄い台 (surface-tile) の上に ink で立てる。
+ * 7日分の棒グラフ。表紙と同じピル型の棒を、薄い台 (chart-track) の上に ink で立てる。
  * 選択中の日は ink、他の日は border-field。棒をタップすると選択が変わる。
+ * 台は chart-track (カードより一段濃い)。
  */
 @Composable
 fun WeekBars(
@@ -312,7 +347,7 @@ fun WeekBars(
                 Canvas(Modifier.width(28.dp).height(chartHeight)) {
                     val w = size.width
                     val r = CornerRadius(w / 2)
-                    drawRoundRect(c.surfaceTile, cornerRadius = r)
+                    drawRoundRect(c.chartTrack, cornerRadius = r)
                     if (v > 0) {
                         // 0 でない日は最低でも丸い頭が見える高さにする
                         val h = (size.height * v / max).coerceAtLeast(w)
@@ -368,7 +403,7 @@ fun TabBar(tabs: List<Pair<String, ImageVector>>, selected: Int, onSelect: (Int)
             Row(
                 Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .height(48.dp)
                     .clip(CircleShape)
                     .background(bg)
                     .selectable(on, role = Role.Tab, onClick = { onSelect(i) }),
@@ -383,28 +418,39 @@ fun TabBar(tabs: List<Pair<String, ImageVector>>, selected: Int, onSelect: (Int)
     }
 }
 
-/** テーマ切り替えボタン。押すたびに 自動 → ライト → ダーク と回る。 */
+/** テーマ切り替えボタン。押すたびに 自動 → ライト → ダーク と回る。見た目は 40dp、押せる範囲は 48dp。 */
 @Composable
 fun ThemeButton(mode: ThemeMode, onChange: (ThemeMode) -> Unit) {
     val c = colors
-    val (label, icon) = when (mode) {
-        ThemeMode.SYSTEM -> "自動" to Feather.smartphone
-        ThemeMode.LIGHT -> "ライト" to Feather.sun
-        ThemeMode.DARK -> "ダーク" to Feather.moon
+    val (labelRes, icon) = when (mode) {
+        ThemeMode.SYSTEM -> R.string.theme_auto to Feather.smartphone
+        ThemeMode.LIGHT -> R.string.theme_light to Feather.sun
+        ThemeMode.DARK -> R.string.theme_dark to Feather.moon
     }
+    val label = stringResource(labelRes)
+    val description = stringResource(R.string.theme_content_desc, label)
     val next = ThemeMode.entries[(mode.ordinal + 1) % ThemeMode.entries.size]
-    Row(
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    Box(
         Modifier
-            .height(40.dp)
-            .clip(CircleShape)
-            .border(1.5.dp, c.borderField, CircleShape)
-            .clickable(role = Role.Button, onClickLabel = "テーマを切り替え") { onChange(next) }
-            .semantics { contentDescription = "テーマ: $label" }
-            .padding(start = Space.s3, end = Space.s3 + 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Space.s2 - 2.dp),
+            .heightIn(min = 48.dp)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = stringResource(R.string.theme_switch)) { onChange(next) }
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
     ) {
-        FIcon(icon, c.ink, 18.dp)
-        Text(label, style = Type.bodySm.copy(fontWeight = FontWeight(600)), color = c.ink)
+        Row(
+            Modifier
+                .height(40.dp)
+                .focusRing(focused, c.focusRing, 20.dp)
+                .clip(CircleShape)
+                .border(1.5.dp, c.borderField, CircleShape)
+                .padding(start = Space.s3, end = Space.s3 + 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.s2 - 2.dp),
+        ) {
+            FIcon(icon, c.ink, 18.dp)
+            Text(label, style = Type.bodySm.copy(fontWeight = FontWeight(600)), color = c.ink)
+        }
     }
 }

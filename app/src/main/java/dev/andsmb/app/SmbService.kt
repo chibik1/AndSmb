@@ -128,7 +128,7 @@ class SmbService : Service() {
 
     private fun startInForeground(s: Settings) {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "SMB サーバー", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
@@ -138,11 +138,11 @@ class SmbService : Service() {
         val ip = ipAddresses(this).firstOrNull() ?: "?"
         val n = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("SMB サーバー実行中")
+            .setContentTitle(getString(R.string.notif_title))
             .setContentText("smb://$ip:${s.port}/${s.shareName}")
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "停止", stop).build())
+            .addAction(Notification.Action.Builder(null, getString(R.string.notif_stop), stop).build())
             .build()
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -164,8 +164,8 @@ class SmbService : Service() {
         // Wi-Fi のアドレスだけで待ち受ける (モバイルデータや VPN 側からは届かない)
         val lan = lanAddress(this)
         if (lan == null) {
-            appendLog("Wi-Fi に接続されていないため開始できません")
-            _state.value = State(running = false, error = "Wi-Fi に接続してから開始してください")
+            appendLog(getString(R.string.log_no_wifi))
+            _state.value = State(running = false, error = getString(R.string.err_connect_wifi_first))
             stopSelf()
             return
         }
@@ -188,7 +188,7 @@ class SmbService : Service() {
             lastReceived = 0; lastSent = 0
             handler.post(trafficTick)
         } catch (e: Exception) {
-            logger.error("起動に失敗しました", e)
+            logger.error(getString(R.string.log_start_failed), e)
             _state.value = State(running = false, error = e.message ?: e.javaClass.simpleName)
             stopSelf()
         }
@@ -213,11 +213,11 @@ class SmbService : Service() {
         }
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(n: Network) {
-                if (n == network) stopFor("Wi-Fi が切断されたため停止しました")
+                if (n == network) stopFor(getString(R.string.stopped_wifi_lost))
             }
 
             override fun onLinkPropertiesChanged(n: Network, lp: LinkProperties) {
-                if (n == network && lp.linkAddresses.none { it.address == address }) stopFor("IP アドレスが変わったため停止しました")
+                if (n == network && lp.linkAddresses.none { it.address == address }) stopFor(getString(R.string.stopped_ip_changed))
             }
         }
         val req = NetworkRequest.Builder()
@@ -236,8 +236,8 @@ class SmbService : Service() {
             this.port = port
         }
         val listener = object : NsdManager.RegistrationListener {
-            override fun onServiceRegistered(info: NsdServiceInfo) = appendLog("Bonjour 公開: ${info.serviceName}")
-            override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) = appendLog("Bonjour 公開失敗 ($code)")
+            override fun onServiceRegistered(info: NsdServiceInfo) = appendLog(getString(R.string.log_bonjour_ok, info.serviceName))
+            override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) = appendLog(getString(R.string.log_bonjour_fail, code))
             override fun onServiceUnregistered(info: NsdServiceInfo) {}
             override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {}
         }

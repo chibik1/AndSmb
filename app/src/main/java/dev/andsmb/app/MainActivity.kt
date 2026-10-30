@@ -61,7 +61,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -131,10 +138,10 @@ private fun treeUriToPath(uri: Uri): String? {
 private fun copyToClipboard(ctx: Context, text: String) {
     ctx.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("AndSmb", text))
     // Android 13 以降はシステムがコピーを知らせるので、それより前だけトーストを出す
-    if (Build.VERSION.SDK_INT < 33) Toast.makeText(ctx, "コピーしました", Toast.LENGTH_SHORT).show()
+    if (Build.VERSION.SDK_INT < 33) Toast.makeText(ctx, ctx.getString(R.string.copied), Toast.LENGTH_SHORT).show()
 }
 
-private enum class Tab(val label: String) { SERVER("サーバー"), TRAFFIC("通信量"), LOG("ログ") }
+private enum class Tab(@StringRes val label: Int) { SERVER(R.string.tab_server), TRAFFIC(R.string.tab_traffic), LOG(R.string.tab_log) }
 
 @Composable
 private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
@@ -172,7 +179,7 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             val path = treeUriToPath(uri)
-            if (path == null) fieldError = Settings.Field.PATH to "内部ストレージのフォルダを選んでください (SD カードは未対応)"
+            if (path == null) fieldError = Settings.Field.PATH to ctx.getString(R.string.err_folder_internal_only)
             else { settings = settings.copy(path = path); fieldError = null }
         }
     }
@@ -190,7 +197,7 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
 
     fun startServer() {
         val s = settings.copy(port = portText.toIntOrNull() ?: -1)
-        val err = s.validate() ?: if (!java.io.File(s.path).isDirectory) Settings.Field.PATH to "フォルダが見つかりません" else null
+        val err = s.validate(ctx) ?: if (!java.io.File(s.path).isDirectory) Settings.Field.PATH to ctx.getString(R.string.err_folder_not_found) else null
         fieldError = err
         if (err != null) return
         settings = s
@@ -219,9 +226,9 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
                 }
                 TabBar(
                     tabs = listOf(
-                        Tab.SERVER.label to Feather.server,
-                        Tab.TRAFFIC.label to Feather.activity,
-                        Tab.LOG.label to Feather.terminal,
+                        stringResource(Tab.SERVER.label) to Feather.server,
+                        stringResource(Tab.TRAFFIC.label) to Feather.activity,
+                        stringResource(Tab.LOG.label) to Feather.terminal,
                     ),
                     selected = tab.ordinal,
                     onSelect = { tab = Tab.entries[it] },
@@ -241,14 +248,14 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
                         StatusCard(state, settings, ips, traffic.connections, onCopy = { copyToClipboard(ctx, it) })
 
                         if (state.running) {
-                            PrimaryButton("サーバー停止", Feather.square, onClick = { SmbService.stop(ctx) }, danger = true)
+                            PrimaryButton(stringResource(R.string.server_stop), Feather.square, onClick = { SmbService.stop(ctx) }, danger = true)
                         } else {
-                            PrimaryButton("サーバー開始", Feather.play, onClick = { startServer() }, enabled = storageOk)
+                            PrimaryButton(stringResource(R.string.server_start), Feather.play, onClick = { startServer() }, enabled = storageOk)
                         }
-                        state.error?.let { if (!state.running) Text("エラー: $it", style = Type.bodySm, color = c.danger) }
+                        state.error?.let { if (!state.running) Text(stringResource(R.string.error_prefix, it), style = Type.bodySm, color = c.danger) }
 
                         Spacer(Modifier.height(Space.s6 - Space.s3))
-                        SectionTitle("設定", Feather.share2)
+                        SectionTitle(stringResource(R.string.section_settings), Feather.share2)
                         SettingsFields(
                             settings = settings,
                             portText = portText,
@@ -277,10 +284,10 @@ private fun LogCard(log: List<String>) {
         if (log.isEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                 FIcon(Feather.terminal, c.inkMuted)
-                Text("ログはまだありません", style = Type.label, color = c.inkMuted)
+                Text(stringResource(R.string.log_empty_title), style = Type.label, color = c.inkMuted)
             }
             Spacer(Modifier.height(Space.s1))
-            Text("サーバーを開始すると、接続や操作の記録がここに表示されます。", style = Type.bodySm, color = c.inkMuted)
+            Text(stringResource(R.string.log_empty_body), style = Type.bodySm, color = c.inkMuted)
         } else {
             SelectionContainer {
                 Text(log.takeLast(200).joinToString("\n"), style = Type.monoSm, color = c.ink)
@@ -315,20 +322,12 @@ private fun PermissionNotice(onAllow: () -> Unit) {
     AppCard(background = c.dangerSurface, elevated = false) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
             FIcon(Feather.alertTriangle, c.danger, 22.dp)
-            Text("ストレージへのアクセス許可が必要です", style = Type.headline, color = c.ink)
+            Text(stringResource(R.string.permission_title), style = Type.headline, color = c.ink)
         }
         Spacer(Modifier.height(Space.s2))
-        Text("共有するファイルを読み書きするため「すべてのファイルへのアクセス」を許可してください。", style = Type.body, color = c.ink)
+        Text(stringResource(R.string.permission_body), style = Type.body, color = c.ink)
         Spacer(Modifier.height(Space.s3))
-        Box(
-            Modifier
-                .height(44.dp)
-                .clip(RoundedCornerShape(50))
-                .background(c.ink)
-                .clickable(onClick = onAllow)
-                .padding(horizontal = Space.s5),
-            contentAlignment = Alignment.Center,
-        ) { Text("許可する", style = Type.label, color = c.onInk) }
+        SecondaryButton(stringResource(R.string.permission_allow), onAllow)
     }
 }
 
@@ -340,36 +339,36 @@ private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, 
         if (state.running) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                 FIcon(Feather.checkCircle, c.success)
-                Text("実行中", style = Type.headline, color = c.success)
+                Text(stringResource(R.string.status_running), style = Type.headline, color = c.success)
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                 FIcon(Feather.square, c.inkMuted)
-                Text("停止中", style = Type.headline, color = c.inkMuted)
+                Text(stringResource(R.string.status_stopped), style = Type.headline, color = c.inkMuted)
             }
         }
 
         // 状態のチップ: 接続台数・書き込み可否・ポート
         Spacer(Modifier.height(Space.s3))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
-            if (state.running) InfoChip(if (connections > 0) "接続 $connections 台" else "接続なし", Feather.users)
-            InfoChip(if (s.readOnly) "読み取り専用" else "読み書き", if (s.readOnly) Feather.eye else Feather.folder)
-            InfoChip("ポート ${if (state.running) state.port else s.port}", Feather.hash)
+            if (state.running) InfoChip(if (connections > 0) pluralStringResource(R.plurals.chip_connections, connections, connections) else stringResource(R.string.chip_no_connections), Feather.users)
+            InfoChip(stringResource(if (s.readOnly) R.string.chip_read_only else R.string.chip_read_write), if (s.readOnly) Feather.eye else Feather.folder)
+            InfoChip(stringResource(R.string.chip_port, if (state.running) state.port else s.port), Feather.hash)
         }
 
         if (ips.isEmpty()) {
             Spacer(Modifier.height(Space.s3))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                 FIcon(Feather.wifiOff, c.danger)
-                Text("ネットワークに接続されていません", style = Type.label, color = c.danger)
+                Text(stringResource(R.string.no_network), style = Type.label, color = c.danger)
             }
             Spacer(Modifier.height(Space.s2))
-            Text("Wi-Fi に接続してください。", style = Type.body, color = c.ink)
+            Text(stringResource(R.string.connect_wifi), style = Type.body, color = c.ink)
         }
         val port = if (state.running) state.port else s.port
         for (ip in ips) {
-            Address("Mac / iPhone (Finder・ファイル):", "smb://$ip:$port/${s.shareName}", onCopy)
-            Address("Windows 11 24H2 以降 (コマンドプロンプト):", "net use Z: \\\\$ip\\${s.shareName} /TCPPORT:$port /USER:${s.user}", onCopy)
+            Address(stringResource(R.string.address_mac), "smb://$ip:$port/${s.shareName}", onCopy)
+            Address(stringResource(R.string.address_windows), "net use Z: \\\\$ip\\${s.shareName} /TCPPORT:$port /USER:${s.user}", onCopy)
         }
     }
 }
@@ -383,9 +382,10 @@ private fun Address(label: String, value: String, onCopy: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(Radius.sm))
             .background(c.surfaceTile)
-            .clickable { onCopy(value) }
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.copy_address)) { onCopy(value) }
             .padding(horizontal = Space.s3, vertical = Space.s2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Space.s2),
@@ -400,25 +400,25 @@ private fun TodayCard(t: TrafficSnapshot, running: Boolean) {
     val c = colors
     val today = t.today
     AppCard {
-        Text("今日", style = Type.headline, color = c.ink)
+        Text(stringResource(R.string.today), style = Type.headline, color = c.ink)
         Spacer(Modifier.height(Space.s3))
         Row(horizontalArrangement = Arrangement.spacedBy(Space.s4)) {
-            Stat("受信", Traffic.format(today?.received ?: 0), Feather.arrowDown)
-            Stat("送信", Traffic.format(today?.sent ?: 0), Feather.arrowUp)
+            Stat(stringResource(R.string.received), Traffic.format(today?.received ?: 0), Feather.arrowDown)
+            Stat(stringResource(R.string.sent), Traffic.format(today?.sent ?: 0), Feather.arrowUp)
         }
         if (running) {
             Spacer(Modifier.height(Space.s3))
             HorizontalDivider(thickness = 1.dp, color = c.surfaceBase)
             Spacer(Modifier.height(Space.s3))
             Text(
-                "起動してから  受信 ${Traffic.format(t.sessionReceived)} ・ 送信 ${Traffic.format(t.sessionSent)}",
+                stringResource(R.string.since_start, Traffic.format(t.sessionReceived), Traffic.format(t.sessionSent)),
                 style = Type.bodySm, color = c.inkMuted,
             )
         }
     }
 }
 
-private enum class Metric(val label: String) { TOTAL("合計"), RECEIVED("受信"), SENT("送信") }
+private enum class Metric(@StringRes val label: Int) { TOTAL(R.string.metric_total), RECEIVED(R.string.received), SENT(R.string.sent) }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -427,7 +427,14 @@ private fun WeekCard(t: TrafficSnapshot) {
     var metric by rememberSaveable { mutableStateOf(Metric.TOTAL) }
     var selected by rememberSaveable { mutableIntStateOf(6) }
     val week = t.week
-    if (week.isEmpty()) return
+    if (week.isEmpty()) {
+        AppCard {
+            Text(stringResource(R.string.last_7_days), style = Type.headline, color = c.ink)
+            Spacer(Modifier.height(Space.s2))
+            Text(stringResource(R.string.traffic_empty), style = Type.bodySm, color = c.inkMuted)
+        }
+        return
+    }
     fun value(d: DayTraffic) = when (metric) {
         Metric.TOTAL -> d.total
         Metric.RECEIVED -> d.received
@@ -437,22 +444,22 @@ private fun WeekCard(t: TrafficSnapshot) {
     val weekSum = week.sumOf { value(it) }
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("直近7日", style = Type.headline, color = c.ink, modifier = Modifier.weight(1f))
-            Text("計 ${Traffic.format(weekSum)}", style = Type.bodySm, color = c.inkMuted)
+            Text(stringResource(R.string.last_7_days), style = Type.headline, color = c.ink, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.week_total, Traffic.format(weekSum)), style = Type.bodySm, color = c.inkMuted)
         }
         Spacer(Modifier.height(Space.s3))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
-            Metric.entries.forEach { m -> FilterChip(m.label, metric == m) { metric = m } }
+            Metric.entries.forEach { m -> FilterChip(stringResource(m.label), metric == m) { metric = m } }
         }
         Spacer(Modifier.height(Space.s4))
         // 選択中の日の値
-        val dow = sel.date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.JAPANESE)
+        val dow = sel.date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.getDefault())
         Text("${sel.date.monthValue}/${sel.date.dayOfMonth} ($dow)", style = Type.bodySm, color = c.inkMuted)
         Text(Traffic.format(value(sel)), style = Type.title, color = c.ink)
         Spacer(Modifier.height(Space.s3))
         WeekBars(
             values = week.map { value(it) },
-            labels = week.mapIndexed { i, d -> if (i == week.size - 1) "今日" else d.date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.JAPANESE) },
+            labels = week.mapIndexed { i, d -> if (i == week.size - 1) stringResource(R.string.today) else d.date.dayOfWeek.getDisplayName(DateTextStyle.SHORT, Locale.getDefault()) },
             selected = selected,
             onSelect = { selected = it },
         )
@@ -469,24 +476,28 @@ private fun SettingsFields(
     onPortChange: (String) -> Unit,
     onPickFolder: () -> Unit,
 ) {
-    LabeledField("共有名", settings.shareName, { onChange(settings.copy(shareName = it)) }, Feather.share2, editable, error = errorFor(Settings.Field.SHARE))
+    LabeledField(stringResource(R.string.field_share_name), settings.shareName, { onChange(settings.copy(shareName = it)) }, Feather.share2, editable, error = errorFor(Settings.Field.SHARE))
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
         LabeledField(
-            "共有フォルダ", settings.path, { onChange(settings.copy(path = it)) }, Feather.folder, editable,
+            stringResource(R.string.field_folder), settings.path, { onChange(settings.copy(path = it)) }, Feather.folder, editable,
             modifier = Modifier.weight(1f),
         )
-        Box(Modifier.padding(bottom = 2.dp)) { SecondaryButton("選択", onPickFolder, enabled = editable) }
+        Box(Modifier.padding(bottom = 2.dp)) { SecondaryButton(stringResource(R.string.field_choose), onPickFolder, enabled = editable) }
     }
-    errorFor(Settings.Field.PATH)?.let { Text("エラー: $it", style = Type.caption, color = colors.danger) }
-    LabeledField("ユーザー名", settings.user, { onChange(settings.copy(user = it.trim())) }, Feather.user, editable, error = errorFor(Settings.Field.USER))
-    LabeledField("パスワード", settings.password, { onChange(settings.copy(password = it)) }, Feather.lock, editable, error = errorFor(Settings.Field.PASSWORD))
+    errorFor(Settings.Field.PATH)?.let { Text(stringResource(R.string.error_prefix, it), style = Type.caption, color = colors.danger) }
+    LabeledField(stringResource(R.string.field_user), settings.user, { onChange(settings.copy(user = it.trim())) }, Feather.user, editable, error = errorFor(Settings.Field.USER))
     LabeledField(
-        "ポート (1024〜65535)", portText, onPortChange, Feather.hash, editable, error = errorFor(Settings.Field.PORT),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        stringResource(R.string.field_password), settings.password, { onChange(settings.copy(password = it)) }, Feather.lock, editable,
+        error = errorFor(Settings.Field.PASSWORD), password = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+    )
+    LabeledField(
+        stringResource(R.string.field_port), portText, onPortChange, Feather.hash, editable, error = errorFor(Settings.Field.PORT),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
     )
     AppCard(padding = 0.dp, elevated = false) {
         Box(Modifier.padding(horizontal = Space.s4)) {
-            ToggleRow("読み取り専用", Feather.eye, settings.readOnly, { onChange(settings.copy(readOnly = it)) }, editable)
+            ToggleRow(stringResource(R.string.toggle_read_only), Feather.eye, settings.readOnly, { onChange(settings.copy(readOnly = it)) }, editable)
         }
     }
 }
