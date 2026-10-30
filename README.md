@@ -54,6 +54,8 @@ net use Z: \\<端末のIP>\android /TCPPORT:4450 /USER:android
 
 24H2 より前の Windows は 445 番以外の SMB に接続できない。
 
+マウントしたドライブ (Z:) はエクスプローラーの「PC」に出る。「ネットワーク」の一覧には出てこない (Windows の機器探索 WS-Discovery / NetBIOS に対応していないため)。
+
 ## ビルド
 
 ```bash
@@ -82,7 +84,7 @@ APK は `app/build/outputs/apk/debug/app-debug.apk`。
 - macOS → Android エミュレータ (API 36) 上のアプリ: 読み書き・日本語名・名前変更・削除・50MB 往復 (SHA1 一致)
 - macOS → Pixel 4a (Android 13) 実機に Wi-Fi 直接接続: SMB 3.1.1 + AES-CMAC 署名、読み書き・日本語名・名前変更・削除・50MB 往復 (SHA1 一致)、Bonjour で `PIXEL4A` として検出
   - 実測: アップロード 約 6.5 MB/s、ダウンロード 約 10 MB/s (50MB ファイル)
-- Windows クライアントは未確認
+- Windows 11 → Pixel 4a 実機: `net use Z: \\<IP>\android /TCPPORT:4450 /USER:android` でマウントできた
 
 ## 注意
 
