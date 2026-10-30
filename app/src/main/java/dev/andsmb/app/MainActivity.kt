@@ -353,7 +353,7 @@ private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, 
         // 状態のチップ: 接続台数・書き込み可否・ポート
         Spacer(Modifier.height(Space.s3))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
-            if (state.running) InfoChip(if (connections > 0) pluralStringResource(R.plurals.chip_connections, connections, connections) else stringResource(R.string.chip_no_connections), Feather.users)
+            if (state.running) InfoChip(pluralStringResource(R.plurals.chip_connections, connections, connections), Feather.users)
             InfoChip(stringResource(if (s.readOnly) R.string.chip_read_only else R.string.chip_read_write), if (s.readOnly) Feather.eye else Feather.folder)
             InfoChip(stringResource(R.string.chip_port, if (state.running) state.port else s.port), Feather.hash)
         }

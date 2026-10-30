@@ -25,10 +25,9 @@
     <string name="status_running">Running</string>
     <string name="status_stopped">Stopped</string>
     <plurals name="chip_connections">
-        <item quantity="one">%1$d device connected</item>
-        <item quantity="other">%1$d devices connected</item>
+        <item quantity="one">%1$d connected</item>
+        <item quantity="other">%1$d connected</item>
     </plurals>
-    <string name="chip_no_connections">No connections</string>
     <string name="chip_read_only">Read-only</string>
     <string name="chip_read_write">Read &amp; write</string>
     <string name="chip_port">Port %1$d</string>

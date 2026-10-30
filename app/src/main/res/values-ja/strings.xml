@@ -25,7 +25,6 @@
     <plurals name="chip_connections">
         <item quantity="other">接続 %1$d 台</item>
     </plurals>
-    <string name="chip_no_connections">接続なし</string>
     <string name="chip_read_only">読み取り専用</string>
     <string name="chip_read_write">読み書き</string>
     <string name="chip_port">ポート %1$d</string>
