@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,13 +17,13 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +80,11 @@ import dev.andsmb.app.ui.SecondaryButton
 import dev.andsmb.app.ui.SectionTitle
 import dev.andsmb.app.ui.Space
 import dev.andsmb.app.ui.Stat
+import dev.andsmb.app.ui.TabBar
+import dev.andsmb.app.ui.ThemeButton
+import dev.andsmb.app.ui.ThemeMode
+import dev.andsmb.app.ui.isDark
+import dev.andsmb.app.ui.resolveDark
 import dev.andsmb.app.ui.ToggleRow
 import dev.andsmb.app.ui.Type
 import dev.andsmb.app.ui.WeekBars
@@ -89,10 +95,22 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         Traffic.load(this)
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
         setContent {
-            AndSmbTheme { MainScreen() }
+            var mode by remember {
+                mutableStateOf(runCatching { ThemeMode.valueOf(prefs.getString("theme", null)!!) }.getOrDefault(ThemeMode.SYSTEM))
+            }
+            val dark = mode.resolveDark()
+            // ステータスバー・ナビゲーションバーのアイコン色をアプリのテーマに合わせる
+            DisposableEffect(dark) {
+                val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark }
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                onDispose {}
+            }
+            AndSmbTheme(dark) {
+                MainScreen(mode, onModeChange = { mode = it; prefs.edit().putString("theme", it.name).apply() })
+            }
         }
     }
 }
@@ -116,8 +134,10 @@ private fun copyToClipboard(ctx: Context, text: String) {
     if (Build.VERSION.SDK_INT < 33) Toast.makeText(ctx, "コピーしました", Toast.LENGTH_SHORT).show()
 }
 
+private enum class Tab(val label: String) { SERVER("サーバー"), TRAFFIC("通信量"), LOG("ログ") }
+
 @Composable
-private fun MainScreen() {
+private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     val ctx = LocalContext.current
     val c = colors
     val state by SmbService.state.collectAsState()
@@ -128,6 +148,7 @@ private fun MainScreen() {
     var fieldError by remember { mutableStateOf<Pair<Settings.Field, String>?>(null) }
     var storageOk by remember { mutableStateOf(hasStorageAccess(ctx)) }
     var ips by remember { mutableStateOf(SmbService.ipAddresses()) }
+    var tab by rememberSaveable { mutableStateOf(Tab.SERVER) }
 
     // 設定画面から戻ってきたら権限と IP を再確認する
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -187,53 +208,82 @@ private fun MainScreen() {
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(c.surfaceTop, c.surfaceBase))),
     ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .safeDrawingPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(start = Space.s4, end = Space.s4, top = Space.s8, bottom = Space.s6),
-            verticalArrangement = Arrangement.spacedBy(Space.s3),
-        ) {
-            Lockup()
-            Spacer(Modifier.height(Space.s1))
-
-            if (!storageOk) PermissionNotice(onAllow = { requestStorage() })
-
-            StatusCard(state, settings, ips, traffic.connections, onCopy = { copyToClipboard(ctx, it) })
-
-            if (state.running) {
-                PrimaryButton("サーバー停止", Feather.square, onClick = { SmbService.stop(ctx) }, danger = true)
-            } else {
-                PrimaryButton("サーバー開始", Feather.play, onClick = { startServer() }, enabled = storageOk)
-            }
-            state.error?.let { if (!state.running) Text("エラー: $it", style = Type.bodySm, color = c.danger) }
-
-            Spacer(Modifier.height(Space.s6 - Space.s3))
-            SectionTitle("通信量", Feather.activity)
-            TodayCard(traffic, state.running)
-            WeekCard(traffic)
-
-            Spacer(Modifier.height(Space.s6 - Space.s3))
-            SectionTitle("設定", Feather.server)
-            SettingsFields(
-                settings = settings,
-                portText = portText,
-                editable = !state.running,
-                errorFor = ::errorFor,
-                onChange = { settings = it; fieldError = null },
-                onPortChange = { portText = it.filter(Char::isDigit).take(5); fieldError = null },
-                onPickFolder = { folderPicker.launch(null) },
-            )
-
-            if (log.isNotEmpty()) {
-                Spacer(Modifier.height(Space.s6 - Space.s3))
-                SectionTitle("ログ", Feather.terminal)
-                AppCard(elevated = false) {
-                    SelectionContainer {
-                        Text(log.takeLast(40).joinToString("\n"), style = Type.monoSm, color = c.ink)
-                    }
+        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(
+                Modifier.padding(start = Space.s4, end = Space.s4, top = Space.s6, bottom = Space.s3),
+                verticalArrangement = Arrangement.spacedBy(Space.s4),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { Lockup() }
+                    ThemeButton(mode, onModeChange)
                 }
+                TabBar(
+                    tabs = listOf(
+                        Tab.SERVER.label to Feather.server,
+                        Tab.TRAFFIC.label to Feather.activity,
+                        Tab.LOG.label to Feather.terminal,
+                    ),
+                    selected = tab.ordinal,
+                    onSelect = { tab = Tab.entries[it] },
+                )
+            }
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = Space.s4, end = Space.s4, top = Space.s1, bottom = Space.s6),
+                verticalArrangement = Arrangement.spacedBy(Space.s3),
+            ) {
+                when (tab) {
+                    Tab.SERVER -> {
+                        if (!storageOk) PermissionNotice(onAllow = { requestStorage() })
+
+                        StatusCard(state, settings, ips, traffic.connections, onCopy = { copyToClipboard(ctx, it) })
+
+                        if (state.running) {
+                            PrimaryButton("サーバー停止", Feather.square, onClick = { SmbService.stop(ctx) }, danger = true)
+                        } else {
+                            PrimaryButton("サーバー開始", Feather.play, onClick = { startServer() }, enabled = storageOk)
+                        }
+                        state.error?.let { if (!state.running) Text("エラー: $it", style = Type.bodySm, color = c.danger) }
+
+                        Spacer(Modifier.height(Space.s6 - Space.s3))
+                        SectionTitle("設定", Feather.share2)
+                        SettingsFields(
+                            settings = settings,
+                            portText = portText,
+                            editable = !state.running,
+                            errorFor = ::errorFor,
+                            onChange = { settings = it; fieldError = null },
+                            onPortChange = { portText = it.filter(Char::isDigit).take(5); fieldError = null },
+                            onPickFolder = { folderPicker.launch(null) },
+                        )
+                    }
+                    Tab.TRAFFIC -> {
+                        TodayCard(traffic, state.running)
+                        WeekCard(traffic)
+                    }
+                    Tab.LOG -> LogCard(log)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogCard(log: List<String>) {
+    val c = colors
+    AppCard(elevated = false) {
+        if (log.isEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                FIcon(Feather.terminal, c.inkMuted)
+                Text("ログはまだありません", style = Type.label, color = c.inkMuted)
+            }
+            Spacer(Modifier.height(Space.s1))
+            Text("サーバーを開始すると、接続や操作の記録がここに表示されます。", style = Type.bodySm, color = c.inkMuted)
+        } else {
+            SelectionContainer {
+                Text(log.takeLast(200).joinToString("\n"), style = Type.monoSm, color = c.ink)
             }
         }
     }
@@ -243,7 +293,7 @@ private fun MainScreen() {
 @Composable
 private fun Lockup() {
     val c = colors
-    val dark = isSystemInDarkTheme()
+    val dark = isDark
     val shape = RoundedCornerShape(9.dp)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
         Box(

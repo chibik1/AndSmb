@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +48,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -343,5 +346,65 @@ fun RowScope.Stat(label: String, value: String, icon: ImageVector) {
         }
         Spacer(Modifier.height(Space.s1))
         Text(value, style = Type.title, color = c.ink)
+    }
+}
+
+/** 画面上部のタブ。トラック (surfaceTile) の上で、選択中だけ墨色のピルになる。 */
+@Composable
+fun TabBar(tabs: List<Pair<String, ImageVector>>, selected: Int, onSelect: (Int) -> Unit) {
+    val c = colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(c.surfaceTile)
+            .padding(Space.s1)
+            .selectableGroup(),
+    ) {
+        tabs.forEachIndexed { i, (label, icon) ->
+            val on = i == selected
+            val bg by animateColorAsState(if (on) c.ink else Color.Transparent, tween(150), label = "tab")
+            val fg = if (on) c.onInk else c.inkMuted
+            Row(
+                Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(CircleShape)
+                    .background(bg)
+                    .selectable(on, role = Role.Tab, onClick = { onSelect(i) }),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FIcon(icon, fg, 18.dp)
+                Spacer(Modifier.width(Space.s2 - 2.dp))
+                Text(label, style = Type.bodySm.copy(fontWeight = FontWeight(600)), color = fg)
+            }
+        }
+    }
+}
+
+/** テーマ切り替えボタン。押すたびに 自動 → ライト → ダーク と回る。 */
+@Composable
+fun ThemeButton(mode: ThemeMode, onChange: (ThemeMode) -> Unit) {
+    val c = colors
+    val (label, icon) = when (mode) {
+        ThemeMode.SYSTEM -> "自動" to Feather.smartphone
+        ThemeMode.LIGHT -> "ライト" to Feather.sun
+        ThemeMode.DARK -> "ダーク" to Feather.moon
+    }
+    val next = ThemeMode.entries[(mode.ordinal + 1) % ThemeMode.entries.size]
+    Row(
+        Modifier
+            .height(40.dp)
+            .clip(CircleShape)
+            .border(1.5.dp, c.borderField, CircleShape)
+            .clickable(role = Role.Button, onClickLabel = "テーマを切り替え") { onChange(next) }
+            .semantics { contentDescription = "テーマ: $label" }
+            .padding(start = Space.s3, end = Space.s3 + 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space.s2 - 2.dp),
+    ) {
+        FIcon(icon, c.ink, 18.dp)
+        Text(label, style = Type.bodySm.copy(fontWeight = FontWeight(600)), color = c.ink)
     }
 }

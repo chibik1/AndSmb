@@ -118,11 +118,25 @@ object Radius {
 }
 
 val LocalColors = staticCompositionLocalOf { Light }
+val LocalDark = staticCompositionLocalOf { false }
 
 /** 現在のテーマの色 */
 val colors: AppColors @Composable get() = LocalColors.current
 
+/** 現在ダークテーマで描いているか */
+val isDark: Boolean @Composable get() = LocalDark.current
+
+/** テーマの選び方。SYSTEM は端末の設定に従う。 */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 @Composable
-fun AndSmbTheme(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalColors provides if (isSystemInDarkTheme()) Dark else Light, content = content)
+fun ThemeMode.resolveDark(): Boolean = when (this) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+@Composable
+fun AndSmbTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalColors provides if (dark) Dark else Light, LocalDark provides dark, content = content)
 }

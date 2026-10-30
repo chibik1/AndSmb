@@ -56,6 +56,12 @@ object Feather {
     val barChart = icon("bar-chart-2", "M18 20V10", "M12 20V4", "M6 20v-6")
     val arrowDown = icon("arrow-down", "M12 5v14", "M19 12l-7 7-7-7")
     val arrowUp = icon("arrow-up", "M12 19V5", "M5 12l7-7 7 7")
+    val sun = icon(
+        "sun", "M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0z", "M12 1v2", "M12 21v2", "M4.22 4.22l1.42 1.42", "M18.36 18.36l1.42 1.42",
+        "M1 12h2", "M21 12h2", "M4.22 19.78l1.42-1.42", "M18.36 5.64l1.42-1.42",
+    )
+    val moon = icon("moon", "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z")
+    val smartphone = icon("smartphone", "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z", "M12 18h.01")
     val server = icon(
         "server", "M4 2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z",
         "M4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z", "M6 6h.01", "M6 18h.01",
