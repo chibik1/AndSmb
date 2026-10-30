@@ -1,0 +1,82 @@
+# AndSmb
+
+Android 端末を SMB (Windows ファイル共有) サーバーにするアプリ。root 不要。
+
+## 構成
+
+| モジュール | 内容 |
+|---|---|
+| `smb-core` | Kotlin/JVM 製の SMB2/3 サーバー (Android 非依存。Mac/PC 上でも動く) |
+| `app` | Android アプリ (フォアグラウンドサービス・設定 UI・Bonjour 公開) |
+
+### smb-core の対応範囲
+
+- 方言: SMB 2.0.2 / 2.1 / 3.0 / 3.0.2 / 3.1.1 (3.1.1 は事前認証整合性 SHA-512)
+- 認証: NTLMv2 (SPNEGO, MIC 検証あり)。NTLMv1 は拒否
+- 署名: HMAC-SHA256 (2.x) / AES-128-CMAC (3.x)。クライアントが署名した要求には署名で応答
+- ファイル操作: 開く/作成/読み書き/一覧/名前変更/削除/タイムスタンプ変更/サイズ変更、複合要求
+- IPC$ + srvsvc (NetrShareEnumAll / NetrShareGetInfo) による共有一覧
+- 未対応: 暗号化 (SMB3 encryption)、oplock/リース、変更通知、名前付きストリーム、サーバー側コピー
+
+## 使い方
+
+1. APK をインストールして起動
+2. 「許可する」から「すべてのファイルへのアクセス」を許可
+3. 共有フォルダ・ユーザー名・パスワード・ポートを確認して「サーバー開始」
+4. 画面に表示されるアドレスでクライアントから接続
+
+root なしでは 1024 未満のポート (SMB 標準の 445) を使えないため、既定は **4450** 番。
+
+### Mac / iPhone
+
+Finder の「サーバへ接続」(⌘K) またはファイルアプリで:
+
+```
+smb://<端末のIP>:4450/android
+```
+
+共有名まで含めて指定すること。macOS は共有一覧の取得に常に 445 番を使うため、ポート番号付きでは一覧表示できない。
+
+### Windows (11 24H2 以降)
+
+```
+net use Z: \\<端末のIP>\android /TCPPORT:4450 /USER:android
+```
+
+24H2 より前の Windows は 445 番以外の SMB に接続できない。
+
+## ビルド
+
+```bash
+./gradlew :app:assembleDebug
+```
+
+APK は `app/build/outputs/apk/debug/app-debug.apk`。
+
+### Mac 上でサーバー本体だけ動かす
+
+```bash
+./gradlew :smb-core:run --args="/path/to/dir user password 4450"
+```
+
+環境変数 `SMB_DEBUG=1` でコマンドごとの結果をログに出す。
+
+### テスト
+
+```bash
+./gradlew :smb-core:test
+```
+
+## 動作確認済み
+
+- macOS 標準クライアント (`mount_smbfs`) → Mac 上の smb-core: SMB 3.1.1 + AES-CMAC 署名、SMB 2.1 + 署名必須
+- macOS → Android エミュレータ (API 36) 上のアプリ: 読み書き・日本語名・名前変更・削除・50MB 往復 (SHA1 一致)
+- macOS → Pixel 4a (Android 13) 実機に Wi-Fi 直接接続: SMB 3.1.1 + AES-CMAC 署名、読み書き・日本語名・名前変更・削除・50MB 往復 (SHA1 一致)、Bonjour で `PIXEL4A` として検出
+  - 実測: アップロード 約 6.5 MB/s、ダウンロード 約 10 MB/s (50MB ファイル)
+- Windows クライアントは未確認
+
+## 注意
+
+- macOS は名前付きストリーム非対応のサーバーに `._ファイル名` (AppleDouble) を作る
+- 共有は内部ストレージのみ (SD カードは未対応)
+- 同一 LAN 内での利用を想定。インターネットに公開しないこと
