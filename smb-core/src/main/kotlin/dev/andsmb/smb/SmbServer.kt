@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -25,7 +26,7 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
     private val nextFileId = AtomicLong(1)
 
     /** パスごとに安定した FileId (FileInternalInformation) を割り当てる */
-    internal fun fileId(path: String): Long = fileIds.getOrPut(path) { nextFileId.getAndIncrement() }
+    internal fun fileId(path: String): Long = fileIds.computeIfAbsent(path) { nextFileId.getAndIncrement() }
 
     /** true にするとコマンドごとの結果をログに出す */
     var debug = System.getenv("SMB_DEBUG") != null
@@ -36,6 +37,9 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
 
     val isRunning: Boolean get() = serverSocket?.isClosed == false
     val connectionCount: Int get() = connections.size
+
+    /** 待ち受け中のポート (config.port に 0 を渡したときの実際の番号を知るため) */
+    val localPort: Int get() = serverSocket?.localPort ?: -1
 
     @Throws(IOException::class)
     fun start() {
@@ -48,6 +52,12 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
         acceptThread = Thread({
             while (!ss.isClosed) {
                 val s: Socket = try { ss.accept() } catch (e: IOException) { break }
+                // 上限を超えた接続はスレッドを作らずにすぐ切る
+                if (connections.size >= config.maxConnections) {
+                    log.info("too many connections, rejected: ${s.inetAddress.hostAddress}")
+                    try { s.close() } catch (_: IOException) {}
+                    continue
+                }
                 s.tcpNoDelay = true
                 s.keepAlive = true
                 val c = SmbConnection(this, s)
@@ -110,6 +120,12 @@ private class Resp(val status: Int, val body: ByteArray) {
     var afterBuild: ((ByteArray) -> Unit)? = null
 }
 
+/** 認証後に受け付ける最大フレーム長: 告知した最大読み書きサイズ 1MB + ヘッダ・複合要求の余裕 */
+private const val MAX_FRAME = (1 shl 20) + 65536
+
+/** 認証前に受け付ける最大フレーム長。NEGOTIATE / SESSION_SETUP はこれで十分足りる */
+private const val MAX_FRAME_UNAUTH = 65536
+
 internal class SmbConnection(private val server: SmbServer, private val socket: Socket) {
     private val config = server.config
     private val log = server.log
@@ -135,21 +151,36 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
         try { socket.close() } catch (_: IOException) {}
     }
 
+    /** 認証済みのセッションがあるか。認証前は受け付けるフレームの大きさと待ち時間を絞る。 */
+    private val authenticated get() = sessions.values.any { it.valid }
+
     fun run() {
         log.info("connected: $peer")
         val input = socket.getInputStream().buffered(1 shl 16)
         val hdr = ByteArray(4)
+        var authDeadline = System.nanoTime() + config.authTimeoutMs * 1_000_000L
         try {
             while (true) {
-                if (!readFully(input, hdr)) break
+                val auth = authenticated
+                // LOGOFF 後に認証し直す場合も、そこから改めて制限時間を数える
+                if (auth) authDeadline = System.nanoTime() + config.authTimeoutMs * 1_000_000L
+                // 認証後は無通信でも待ち続ける (切断検出は TCP keepalive 任せ)
+                if (!readFully(input, hdr, if (auth) 0L else authDeadline)) break
                 val len = (hdr.u8(1) shl 16) or (hdr.u8(2) shl 8) or hdr.u8(3)
-                if (hdr[0].toInt() != 0) { input.skip(len.toLong()); continue } // NetBIOS keepalive 等
-                if (len < 4 || len > 16 * 1024 * 1024) break
+                val maxLen = if (auth) MAX_FRAME else MAX_FRAME_UNAUTH
+                if (len > maxLen) { log.info("frame too large ($len bytes), closing: $peer"); break }
+                // 長さを受け取ったら、本体は一定時間内に届き終えなければならない
+                val frameDeadline = System.nanoTime() + config.frameTimeoutMs * 1_000_000L
+                val deadline = if (auth) frameDeadline else minOf(frameDeadline, authDeadline)
+                if (hdr[0].toInt() != 0) { if (!skipFully(input, len, deadline)) break; continue } // NetBIOS keepalive 等
+                if (len < 4) break
                 val data = ByteArray(len)
-                if (!readFully(input, data)) break
+                if (!readFully(input, data, deadline)) break
                 server.bytesReceived.addAndGet(4L + len)
                 handleFrame(data)
             }
+        } catch (e: SocketTimeoutException) {
+            log.info("timed out: $peer")
         } catch (e: SocketException) {
             // 切断
         } catch (e: Exception) {
@@ -162,14 +193,38 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
         }
     }
 
-    private fun readFully(input: java.io.InputStream, b: ByteArray): Boolean {
+    /**
+     * b を埋めるまで読む。deadline (System.nanoTime 基準、0 なら無期限) を過ぎたら SocketTimeoutException。
+     * 少しずつ送り続ける相手でも合計時間で打ち切れるよう、読むたびに残り時間をタイムアウトにする。
+     */
+    private fun readFully(input: java.io.InputStream, b: ByteArray, deadline: Long): Boolean {
         var n = 0
         while (n < b.size) {
+            setReadTimeout(deadline)
             val r = input.read(b, n, b.size - n)
             if (r < 0) return false
             n += r
         }
         return true
+    }
+
+    private fun skipFully(input: java.io.InputStream, len: Int, deadline: Long): Boolean {
+        val buf = ByteArray(minOf(len, 4096))
+        var left = len
+        while (left > 0) {
+            setReadTimeout(deadline)
+            val r = input.read(buf, 0, minOf(left, buf.size))
+            if (r < 0) return false
+            left -= r
+        }
+        return true
+    }
+
+    private fun setReadTimeout(deadline: Long) {
+        if (deadline == 0L) { socket.soTimeout = 0; return }
+        val ms = (deadline - System.nanoTime()) / 1_000_000
+        if (ms <= 0) throw SocketTimeoutException()
+        socket.soTimeout = ms.toInt()
     }
 
     private fun send(vararg msgs: ByteArray) {
@@ -741,7 +796,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
             val list = ArrayList<Pair<String, java.io.File>>()
             if (match(".")) list += "." to o.file
             if (match("..")) list += ".." to (if (o.path.isEmpty()) o.file else (o.file.parentFile ?: o.file))
-            val children = o.file.listFiles()?.sortedBy { it.name.lowercase() } ?: emptyList()
+            val children = SharePath.listChildren(o.tree.share!!.root, o.file)
             children.filter { match(it.name) }.forEach { list += it.name to it }
             o.dirEntries = list
             o.dirPos = 0
@@ -925,14 +980,5 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
 
     // ---------------------------------------------------------------- パス
 
-    /** 共有内の相対パスを実ファイルに変換する。共有外へ出るパスは拒否する。 */
-    private fun resolve(share: SmbShare, name: String): Pair<java.io.File, String> {
-        val parts = name.replace('/', '\\').split('\\').filter { it.isNotEmpty() && it != "." }
-        for (p in parts) {
-            if (p == ".." || p.any { it < ' ' || it in "<>:\"|?*" }) throw SmbError(Status.OBJECT_NAME_INVALID)
-        }
-        var f = share.root
-        for (p in parts) f = java.io.File(f, p)
-        return f to parts.joinToString("\\")
-    }
+    private fun resolve(share: SmbShare, name: String): Pair<java.io.File, String> = SharePath.resolve(share.root, name)
 }

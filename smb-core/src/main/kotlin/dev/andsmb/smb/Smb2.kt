@@ -13,6 +13,12 @@ data class SmbConfig(
     /** 未登録ユーザー・匿名をゲストとして通すか (Windows 11 24H2 以降はゲストを拒否する) */
     val allowGuest: Boolean = false,
     val bindAddress: String? = null,
+    /** 同時接続数の上限。超えた接続はすぐに切る */
+    val maxConnections: Int = 32,
+    /** 接続してから認証を終えるまでの制限時間 (ミリ秒) */
+    val authTimeoutMs: Int = 30_000,
+    /** 1 フレームの長さを受け取ってから本体を受け取り終えるまでの制限時間 (ミリ秒) */
+    val frameTimeoutMs: Int = 30_000,
 )
 
 interface SmbLogger {
