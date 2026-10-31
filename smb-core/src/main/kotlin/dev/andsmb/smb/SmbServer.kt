@@ -41,6 +41,23 @@ class SmbServer(val config: SmbConfig, internal val log: SmbLogger) {
     val isRunning: Boolean get() = serverSocket?.isClosed == false
     val connectionCount: Int get() = connections.size
 
+    /** つながっている端末の数 (接続元アドレスの種類)。1 台が何本つないでも 1 台と数える */
+    val clientCount: Int get() = synchronized(connections) { connections.map { it.peer }.toSet().size }
+
+    /** つながっている端末の一覧 (接続元アドレスごと。古い順) */
+    fun clients(): List<SmbClientInfo> = synchronized(connections) { connections.toList() }
+        .groupBy { it.peer }
+        .map { (addr, cs) ->
+            SmbClientInfo(
+                address = addr,
+                name = cs.firstNotNullOfOrNull { it.workstation.takeIf { n -> n.isNotBlank() } } ?: "",
+                connectedAt = cs.minOf { it.connectedAt },
+                received = cs.sumOf { it.rx.get() },
+                sent = cs.sumOf { it.tx.get() },
+            )
+        }
+        .sortedBy { it.connectedAt }
+
     /** 待ち受け中のポート (config.port に 0 を渡したときの実際の番号を知るため) */
     val localPort: Int get() = serverSocket?.localPort ?: -1
 
@@ -145,7 +162,11 @@ private val QUIET_STATUSES = setOf(
 internal class SmbConnection(private val server: SmbServer, private val socket: Socket) {
     private val config = server.config
     private val log = server.log
-    private val peer = socket.inetAddress.hostAddress ?: "?"
+    val peer = socket.inetAddress.hostAddress ?: "?"
+    val connectedAt = System.currentTimeMillis()
+    @Volatile var workstation: String = ""
+    val rx = java.util.concurrent.atomic.AtomicLong()
+    val tx = java.util.concurrent.atomic.AtomicLong()
 
     private var dialect = 0
     private var clientCaps = 0
@@ -201,6 +222,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
                 val data = ByteArray(len)
                 if (!readFully(input, data, deadline)) break
                 server.bytesReceived.addAndGet(4L + len)
+                rx.addAndGet(4L + len)
                 handleFrame(data)
             }
         } catch (e: SocketTimeoutException) {
@@ -260,6 +282,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
         msgs.forEach { out.write(it) }
         out.flush()
         server.bytesSent.addAndGet(4L + total)
+        tx.addAndGet(4L + total)
     }
 
     private fun handleFrame(data: ByteArray) {
@@ -558,6 +581,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
                 }
                 session.user = res.user
                 session.guest = res.guest
+                if (res.workstation.isNotBlank()) workstation = res.workstation
                 if (!res.guest && res.sessionKey != null) {
                     val key = res.sessionKey.copyOf(16)
                     session.signingKey = when {

@@ -24,6 +24,18 @@ data class SmbConfig(
     val clientFilter: (InetAddress) -> Boolean = LocalAddresses::isLocal,
 )
 
+/** つながっている端末 1 台ぶんの情報 (接続元アドレスごとにまとめたもの) */
+data class SmbClientInfo(
+    val address: String,
+    /** 端末が名乗った名前。分からなければ空 */
+    val name: String,
+    /** いちばん古い接続の開始時刻 (エポックミリ秒) */
+    val connectedAt: Long,
+    /** 今つながっている接続の受信・送信バイト数の合計 */
+    val received: Long,
+    val sent: Long,
+)
+
 interface SmbLogger {
     fun info(msg: String)
     fun error(msg: String, t: Throwable? = null)

@@ -21,16 +21,8 @@
     <!-- Server tab -->
     <string name="server_start">Start server</string>
     <string name="server_stop">Stop server</string>
-    <string name="section_settings">Settings</string>
     <string name="status_running">Running</string>
     <string name="status_stopped">Stopped</string>
-    <plurals name="chip_connections">
-        <item quantity="one">%1$d connected</item>
-        <item quantity="other">%1$d connected</item>
-    </plurals>
-    <string name="chip_read_only">Read-only</string>
-    <string name="chip_read_write">Read &amp; write</string>
-    <string name="chip_port">Port %1$d</string>
     <string name="no_network">Not connected to a network</string>
     <string name="connect_wifi">Please connect to Wi-Fi.</string>
     <string name="address_mac">Mac / iPhone (Finder / Files):</string>
@@ -86,4 +78,30 @@
     <string name="stopped_ip_changed">Stopped because the IP address changed</string>
     <string name="log_bonjour_ok">Bonjour published: %1$s</string>
     <string name="log_bonjour_fail">Bonjour publishing failed (%1$d)</string>
+
+    <!-- Home screen -->
+    <string name="smb_address" translatable="false">SMB ADDRESS</string>
+    <string name="strip_connected">Connected</string>
+    <string name="unit_devices">devices</string>
+    <string name="client_tag_desc">%1$s, show details</string>
+    <string name="client_since_now">Just connected</string>
+    <string name="client_since_min">Connected for %1$d min</string>
+    <string name="copy_hint">Copy address</string>
+    <string name="settings_open">Connection settings</string>
+    <string name="settings_close">Close</string>
+
+    <!-- Settings sheet -->
+    <string name="settings_title">Connection settings</string>
+    <string name="settings_locked_note">Stop the server to change these settings.</string>
+    <string name="section_share">Share</string>
+    <string name="section_auth">Sign-in</string>
+    <string name="section_network">Network</string>
+    <string name="section_how">How to connect</string>
+    <string name="how_summary">smb / net use</string>
+    <string name="how_mac_note">Enter this address in Finder\'s \"Connect to Server\" or the Files app.</string>
+    <string name="how_ip_note">Finder\'s Network list shows this as a separate item from the name above.</string>
+    <string name="how_windows_note">Run it in Command Prompt.</string>
+    <string name="network_note">Changes apply the next time the server starts. Up to 8 devices can connect at once.</string>
+    <string name="expanded">Expanded</string>
+    <string name="collapsed">Collapsed</string>
 </resources>

@@ -181,14 +181,15 @@ fun LabeledField(
                 .fillMaxWidth()
                 .height(52.dp)
                 .focusRing(focused, c.focusRing, Radius.md)
-                .alpha(if (enabled) 1f else 0.4f)
                 .clip(shape)
                 .background(c.surfaceRaised)
                 .border(1.5.dp, if (error != null) c.danger else c.borderField, shape)
                 .padding(start = Space.s4, end = if (password) Space.s1 else Space.s4),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FIcon(icon, c.inkMuted)
+            // 触れないときは中身だけ薄くする。表示切り替えのボタンは触れなくても使える
+            val dim = Modifier.alpha(if (enabled) 1f else 0.4f)
+            FIcon(icon, c.inkMuted, modifier = dim)
             Spacer(Modifier.width(Space.s2))
             BasicTextField(
                 value = value,
@@ -200,7 +201,7 @@ fun LabeledField(
                 keyboardOptions = keyboardOptions,
                 visualTransformation = if (password && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
                 interactionSource = source,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).then(dim),
             )
             if (password) {
                 val desc = stringResource(if (revealed) R.string.password_hide else R.string.password_show)
@@ -208,7 +209,7 @@ fun LabeledField(
                     Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .clickable(enabled = enabled, role = Role.Button, onClickLabel = desc) { revealed = !revealed }
+                        .clickable(role = Role.Button, onClickLabel = desc) { revealed = !revealed }
                         .semantics { contentDescription = desc },
                     contentAlignment = Alignment.Center,
                 ) { FIcon(if (revealed) Feather.eyeOff else Feather.eye, c.inkMuted) }
