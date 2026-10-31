@@ -14,6 +14,8 @@ internal class NtlmServer(private val serverName: String, private val users: Map
         /** 名前もパスワードも空の匿名ログイン (Finder が最初に試す)。総当たりの数には入れない */
         val anonymous: Boolean = false,
         val guest: Boolean = false,
+        /** 失敗の理由 (ログ用) */
+        val reason: String = "",
         val sessionKey: ByteArray? = null,
         val flags: Int = 0,
     )
@@ -55,7 +57,7 @@ internal class NtlmServer(private val serverName: String, private val users: Map
     }
 
     fun authenticate(msg: ByteArray): Result {
-        if (msg.size < 64 || !msg.copyOf(8).contentEquals(SIGNATURE) || msg.i32(8) != 3) return Result(false)
+        if (msg.size < 64 || !msg.copyOf(8).contentEquals(SIGNATURE) || msg.i32(8) != 3) return Result(false, reason = "malformed message")
         fun field(o: Int) = msg.slice(msg.i32(o + 4), msg.u16(o))
         val nt = field(20)
         val authFlags = msg.i32(60)
@@ -70,15 +72,15 @@ internal class NtlmServer(private val serverName: String, private val users: Map
         }
         val entry = users.entries.firstOrNull { it.key.equals(user, ignoreCase = true) }
         if (entry == null) {
-            return if (allowGuest) Result(true, user = user, guest = true) else Result(false)
+            return if (allowGuest) Result(true, user = user, guest = true) else Result(false, user = user, reason = "unknown user")
         }
-        if (nt.size <= 24) return Result(false) // NTLMv1 は拒否
+        if (nt.size <= 24) return Result(false, user = user, reason = "NTLMv1 not allowed") // NTLMv1 は拒否
 
         val ntowf = Crypto.hmacMd5(Crypto.md4(entry.value.utf16()), (user.uppercase() + domain).utf16())
         val proof = nt.copyOf(16)
         val blob = nt.copyOfRange(16, nt.size)
         val expected = Crypto.hmacMd5(ntowf, serverChallenge, blob)
-        if (!java.security.MessageDigest.isEqual(proof, expected)) return Result(false)
+        if (!java.security.MessageDigest.isEqual(proof, expected)) return Result(false, user = user, reason = "wrong password")
 
         val baseKey = Crypto.hmacMd5(ntowf, proof)
         val exported = if (authFlags and KEY_EXCH != 0 && encKey.size == 16) Crypto.rc4(baseKey, encKey) else baseKey
@@ -87,7 +89,7 @@ internal class NtlmServer(private val serverName: String, private val users: Map
         if (hasMic(blob) && msg.size >= 88) {
             val zeroed = msg.copyOf().also { java.util.Arrays.fill(it, 72, 88, 0) }
             val mic = Crypto.hmacMd5(exported, negotiateMsg, challengeMsg, zeroed)
-            if (!java.security.MessageDigest.isEqual(mic, msg.copyOfRange(72, 88))) return Result(false)
+            if (!java.security.MessageDigest.isEqual(mic, msg.copyOfRange(72, 88))) return Result(false, user = user, reason = "MIC mismatch")
         }
         return Result(true, user = entry.key, sessionKey = exported, flags = authFlags)
     }

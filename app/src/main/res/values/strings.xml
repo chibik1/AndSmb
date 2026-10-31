@@ -1,3 +1,89 @@
 <resources>
-    <string name="app_name">AndSmb</string>
+    <string name="app_name" translatable="false">AndSmb</string>
+
+    <!-- Tabs -->
+    <string name="tab_server">Server</string>
+    <string name="tab_traffic">Traffic</string>
+    <string name="tab_log">Log</string>
+
+    <!-- Theme button -->
+    <string name="theme_auto">Auto</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_content_desc">Theme: %1$s</string>
+    <string name="theme_switch">Switch theme</string>
+
+    <!-- Common -->
+    <string name="error_prefix">Error: %1$s</string>
+    <string name="copied">Copied</string>
+    <string name="copy_address">Copy address</string>
+
+    <!-- Server tab -->
+    <string name="server_start">Start server</string>
+    <string name="server_stop">Stop server</string>
+    <string name="section_settings">Settings</string>
+    <string name="status_running">Running</string>
+    <string name="status_stopped">Stopped</string>
+    <plurals name="chip_connections">
+        <item quantity="one">%1$d connected</item>
+        <item quantity="other">%1$d connected</item>
+    </plurals>
+    <string name="chip_read_only">Read-only</string>
+    <string name="chip_read_write">Read &amp; write</string>
+    <string name="chip_port">Port %1$d</string>
+    <string name="no_network">Not connected to a network</string>
+    <string name="connect_wifi">Please connect to Wi-Fi.</string>
+    <string name="address_mac">Mac / iPhone (Finder / Files):</string>
+    <string name="address_ip">By IP address (if the above doesn\'t work):</string>
+    <string name="address_windows">Windows 11 24H2 or later (Command Prompt):</string>
+
+    <!-- Permission notice -->
+    <string name="permission_title">Storage access needed</string>
+    <string name="permission_body">Allow \"All files access\" so the files you share can be read and written.</string>
+    <string name="permission_allow">Allow</string>
+
+    <!-- Settings fields -->
+    <string name="field_share_name">Share name</string>
+    <string name="field_folder">Shared folder</string>
+    <string name="field_choose">Choose</string>
+    <string name="field_user">Username</string>
+    <string name="field_password">Password</string>
+    <string name="field_port">Port (1024–65535)</string>
+    <string name="toggle_read_only">Read-only</string>
+    <string name="password_show">Show password</string>
+    <string name="password_hide">Hide password</string>
+
+    <!-- Validation -->
+    <string name="err_share_invalid">The share name contains characters that aren\'t allowed</string>
+    <string name="err_user_required">Enter a username</string>
+    <string name="err_password_short">Use at least %1$d characters for the password</string>
+    <string name="err_port_range">Use a port number from 1024 to 65535</string>
+    <string name="err_folder_internal_only">Choose a folder on internal storage (SD cards are not supported)</string>
+    <string name="err_folder_not_found">Folder not found</string>
+
+    <!-- Traffic tab -->
+    <string name="today">Today</string>
+    <string name="received">Received</string>
+    <string name="sent">Sent</string>
+    <string name="since_start">Since start:  received %1$s · sent %2$s</string>
+    <string name="metric_total">Total</string>
+    <string name="last_7_days">Last 7 days</string>
+    <string name="week_total">Total %1$s</string>
+    <string name="traffic_empty">No data yet</string>
+
+    <!-- Log tab -->
+    <string name="log_empty_title">No log yet</string>
+    <string name="log_empty_body">Connections and operations will appear here once the server starts.</string>
+
+    <!-- Service: notification and log lines -->
+    <string name="notif_channel">SMB server</string>
+    <string name="notif_title">SMB server running</string>
+    <string name="notif_stop">Stop</string>
+    <string name="log_no_wifi">Can\'t start: not connected to Wi-Fi</string>
+    <string name="err_connect_wifi_first">Connect to Wi-Fi, then start the server</string>
+    <string name="log_start_failed">Failed to start</string>
+    <string name="stopped_wifi_lost">Stopped because Wi-Fi was disconnected</string>
+    <string name="stopped_ip_changed">Stopped because the IP address changed</string>
+    <string name="log_bonjour_ok">Bonjour published: %1$s</string>
+    <string name="log_bonjour_fail">Bonjour publishing failed (%1$d)</string>
 </resources>

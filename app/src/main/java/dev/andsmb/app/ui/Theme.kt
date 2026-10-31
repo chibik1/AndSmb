@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import dev.andsmb.app.R
 
-// デザインシステム「AndSmb」(tokens.json v2) の値をそのまま写したもの。
+// デザインシステム「AndSmb」(tokens.json v3) の値をそのまま写したもの。
 
 @Immutable
 data class AppColors(
@@ -30,6 +30,7 @@ data class AppColors(
     val onInk: Color,
     val inkMuted: Color,
     val borderField: Color,
+    val chartTrack: Color,
     val accent: Color,
     val accentDeep: Color,
     val success: Color,
@@ -50,6 +51,7 @@ private val Light = AppColors(
     onInk = Color(0xFFFFFFFF),
     inkMuted = Color(0xFF3F4F57),
     borderField = Color(0xFF5F7279),
+    chartTrack = Color(0xFFCBD8DC),
     accent = Color(0xFF0A6D93),
     accentDeep = Color(0xFF2A8BAD),
     success = Color(0xFF1F6F5C),
@@ -68,6 +70,7 @@ private val Dark = AppColors(
     onInk = Color(0xFF0B0B0C),
     inkMuted = Color(0xFFB4C3CA),
     borderField = Color(0xFF8EA1A9),
+    chartTrack = Color(0xFF3F525C),
     accent = Color(0xFF5CD3F5),
     accentDeep = Color(0xFF2A8BAD),
     success = Color(0xFF6FD6B4),

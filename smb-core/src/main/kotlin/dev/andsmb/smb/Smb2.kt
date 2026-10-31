@@ -49,6 +49,13 @@ object Cmd {
     const val QUERY_INFO = 16
     const val SET_INFO = 17
     const val OPLOCK_BREAK = 18
+
+    private val NAMES = arrayOf(
+        "NEGOTIATE", "SESSION_SETUP", "LOGOFF", "TREE_CONNECT", "TREE_DISCONNECT", "CREATE", "CLOSE", "FLUSH", "READ", "WRITE",
+        "LOCK", "IOCTL", "CANCEL", "ECHO", "QUERY_DIRECTORY", "CHANGE_NOTIFY", "QUERY_INFO", "SET_INFO", "OPLOCK_BREAK",
+    )
+
+    fun name(cmd: Int): String = NAMES.getOrNull(cmd) ?: "cmd $cmd"
 }
 
 object Status {
