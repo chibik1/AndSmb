@@ -50,7 +50,7 @@ internal object FileInfo {
         if (cls == 12) { // FileNamesInformation
             return b.u32(0).u32(0).u32(nm.size).bytes(nm).toByteArray()
         }
-        if (cls !in intArrayOf(1, 2, 3, 37, 38, 60)) return null
+        if (cls !in intArrayOf(1, 2, 3, 37, 38, 60, 63, 78, 79, 80, 81)) return null
         b.u32(0).u32(0)
         b.u64(fileTime(s.created)).u64(fileTime(s.accessed)).u64(fileTime(s.modified)).u64(fileTime(s.modified))
         b.u64(s.size).u64(s.allocation).u32(s.attributes).u32(nm.size)
@@ -60,6 +60,12 @@ internal object FileInfo {
             3 -> b.u32(0).u8(0).u8(0).zeros(24)
             37 -> b.u32(0).u8(0).u8(0).zeros(24).u16(0).u64(s.id)
             60 -> b.u32(0).u32(0).u64(s.id).u64(0)
+            // 新しい ID 付きの形式。どれを使うかはクライアント次第なので、仕様にあるものは全部返す
+            63 -> b.u32(0).u32(0).u64(s.id).u64(0).u8(0).u8(0).zeros(24)
+            78 -> b.u32(0).u32(0).u64(s.id)
+            79 -> b.u32(0).u32(0).u64(s.id).u8(0).u8(0).zeros(24)
+            80 -> b.u32(0).u32(0).u64(s.id).u64(s.id).u64(0)
+            81 -> b.u32(0).u32(0).u64(s.id).u64(s.id).u64(0).u8(0).u8(0).zeros(24)
         }
         return b.bytes(nm).toByteArray()
     }

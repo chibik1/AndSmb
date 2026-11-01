@@ -874,7 +874,7 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
             val childPath = when (n) { ".", ".." -> o.path; else -> if (o.path.isEmpty()) n else o.path + "\\" + n }
             val st = FileInfo.stat(f, server.fileId(childPath), ro)
             if (st == null) { o.dirPos++; continue }
-            val e = FileInfo.dirEntry(cls, n, st) ?: throw SmbError(Status.INVALID_INFO_CLASS)
+            val e = FileInfo.dirEntry(cls, n, st) ?: run { log.error("$peer QUERY_DIRECTORY unsupported class $cls"); throw SmbError(Status.INVALID_INFO_CLASS) }
             val start = (out.size + 7) and 7.inv()
             if (start + e.size > maxOut) {
                 if (lastStart < 0) throw SmbError(Status.BUFFER_OVERFLOW)
@@ -908,11 +908,11 @@ internal class SmbConnection(private val server: SmbServer, private val socket: 
         val data: ByteArray = when (type) {
             1 -> {
                 val st = statOf(o) ?: throw SmbError(Status.OBJECT_NAME_NOT_FOUND)
-                FileInfo.fileInfo(cls, st, o.path, o.access, o.deleteOnClose) ?: throw SmbError(Status.INVALID_INFO_CLASS)
+                FileInfo.fileInfo(cls, st, o.path, o.access, o.deleteOnClose) ?: run { log.error("$peer QUERY_INFO unsupported file class $cls"); throw SmbError(Status.INVALID_INFO_CLASS) }
             }
             2 -> {
                 val root = share?.root ?: throw SmbError(Status.INVALID_PARAMETER)
-                FileInfo.fsInfo(cls, root, share.name, share.readOnly) ?: throw SmbError(Status.INVALID_INFO_CLASS)
+                FileInfo.fsInfo(cls, root, share.name, share.readOnly) ?: run { log.error("$peer QUERY_INFO unsupported fs class $cls"); throw SmbError(Status.INVALID_INFO_CLASS) }
             }
             3 -> FileInfo.securityDescriptor(additional)
             else -> throw SmbError(Status.NOT_SUPPORTED)
