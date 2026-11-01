@@ -19,15 +19,8 @@
     <!-- Server tab -->
     <string name="server_start">サーバー開始</string>
     <string name="server_stop">サーバー停止</string>
-    <string name="section_settings">設定</string>
     <string name="status_running">実行中</string>
     <string name="status_stopped">停止中</string>
-    <plurals name="chip_connections">
-        <item quantity="other">接続 %1$d 台</item>
-    </plurals>
-    <string name="chip_read_only">読み取り専用</string>
-    <string name="chip_read_write">読み書き</string>
-    <string name="chip_port">ポート %1$d</string>
     <string name="no_network">ネットワークに接続されていません</string>
     <string name="connect_wifi">Wi-Fi に接続してください。</string>
     <string name="address_mac">Mac / iPhone (Finder・ファイル):</string>
@@ -83,4 +76,29 @@
     <string name="stopped_ip_changed">IP アドレスが変わったため停止しました</string>
     <string name="log_bonjour_ok">Bonjour 公開: %1$s</string>
     <string name="log_bonjour_fail">Bonjour 公開失敗 (%1$d)</string>
+
+    <!-- Home screen -->
+    <string name="strip_connected">接続</string>
+    <string name="unit_devices">台</string>
+    <string name="client_tag_desc">%1$s、詳細を表示</string>
+    <string name="client_since_now">いま接続しました</string>
+    <string name="client_since_min">接続して %1$d 分</string>
+    <string name="copy_hint">アドレスをコピー</string>
+    <string name="settings_open">接続の設定</string>
+    <string name="settings_close">閉じる</string>
+
+    <!-- Settings sheet -->
+    <string name="settings_title">接続の設定</string>
+    <string name="settings_locked_note">設定を変えるには、サーバーを停止してください。</string>
+    <string name="section_share">共有</string>
+    <string name="section_auth">認証</string>
+    <string name="section_network">ネットワーク</string>
+    <string name="section_how">接続のしかた</string>
+    <string name="how_summary">smb / net use</string>
+    <string name="how_mac_note">Finder の「サーバへ接続」やファイル App にこのアドレスを入れます。</string>
+    <string name="how_ip_note">Finder の「ネットワーク」では、上の名前とは別の項目として並びます。</string>
+    <string name="how_windows_note">コマンドプロンプトで実行します。</string>
+    <string name="network_note">変更は次にサーバーを開始したときから反映されます。同時に接続できるのは最大 8 台です。</string>
+    <string name="expanded">開いています</string>
+    <string name="collapsed">閉じています</string>
 </resources>

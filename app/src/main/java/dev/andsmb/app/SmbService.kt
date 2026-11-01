@@ -45,6 +45,9 @@ class SmbService : Service() {
         val bonjourName: String? = null,
     )
 
+    /** 画面に出す、つながっている端末 1 台ぶん。rxRate / txRate は直近 1 秒あたりのバイト数 */
+    data class ClientLive(val address: String, val name: String, val connectedAt: Long, val rxRate: Long, val txRate: Long)
+
     companion object {
         private const val TAG = "AndSmb"
         private const val CHANNEL = "server"
@@ -52,6 +55,9 @@ class SmbService : Service() {
 
         private val _state = MutableStateFlow(State())
         val state: StateFlow<State> = _state
+
+        private val _clients = MutableStateFlow<List<ClientLive>>(emptyList())
+        val clients: StateFlow<List<ClientLive>> = _clients
 
         private val _log = MutableStateFlow<List<String>>(emptyList())
         val log: StateFlow<List<String>> = _log
@@ -124,6 +130,33 @@ class SmbService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var lastReceived = 0L
     private var lastSent = 0L
+    private val prevClient = HashMap<String, Pair<Long, Long>>()
+    private var prevClientAt = 0L
+
+    /** 1秒ごとに、端末ごとの受信・送信の速さを出す */
+    private val clientsTick = object : Runnable {
+        override fun run() {
+            refreshClients()
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun refreshClients() {
+        val srv = server ?: return
+        val now = System.nanoTime()
+        val secs = if (prevClientAt == 0L) 1.0 else ((now - prevClientAt) / 1e9).coerceAtLeast(0.2)
+        val list = srv.clients().map { c ->
+            val prev = prevClient[c.address]
+            // 接続が閉じて合計が減ったときは 0 として扱う
+            val rx = if (prev == null) 0L else ((c.received - prev.first).coerceAtLeast(0) / secs).toLong()
+            val tx = if (prev == null) 0L else ((c.sent - prev.second).coerceAtLeast(0) / secs).toLong()
+            ClientLive(c.address, c.name.ifBlank { c.address }, c.connectedAt, rx, tx)
+        }
+        prevClient.clear()
+        srv.clients().forEach { prevClient[it.address] = it.received to it.sent }
+        prevClientAt = now
+        _clients.value = list
+    }
 
     /** 2秒ごとにサーバーの通信量を読み、日ごとの記録に足す */
     private val trafficTick = object : Runnable {
@@ -217,6 +250,8 @@ class SmbService : Service() {
             watchNetwork(network, address)
             lastReceived = 0; lastSent = 0
             handler.post(trafficTick)
+            prevClient.clear(); prevClientAt = 0L
+            handler.post(clientsTick)
         } catch (e: Exception) {
             logger.error(getString(R.string.log_start_failed), e)
             _state.value = State(running = false, error = e.message ?: e.javaClass.simpleName)
@@ -284,6 +319,8 @@ class SmbService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(trafficTick)
+        handler.removeCallbacks(clientsTick)
+        _clients.value = emptyList()
         flushTraffic()
         Traffic.stopped(this)
         nsdListener?.let { l ->

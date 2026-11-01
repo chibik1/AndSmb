@@ -18,6 +18,8 @@ internal class NtlmServer(private val serverName: String, private val users: Map
         val reason: String = "",
         val sessionKey: ByteArray? = null,
         val flags: Int = 0,
+        /** クライアントが名乗った端末名 (AUTHENTICATE の WorkstationName)。空のこともある */
+        val workstation: String = "",
     )
 
     private var negotiateMsg = ByteArray(0)
@@ -65,14 +67,15 @@ internal class NtlmServer(private val serverName: String, private val users: Map
         fun str(o: Int) = String(field(o), if (unicode) UTF16LE else Charsets.ISO_8859_1)
         val domain = str(28)
         val user = str(36)
+        val workstation = str(44)
         val encKey = field(52)
 
         if (user.isEmpty() && nt.isEmpty()) {
-            return if (allowGuest) Result(true, guest = true, anonymous = true) else Result(false, anonymous = true)
+            return if (allowGuest) Result(true, guest = true, anonymous = true, workstation = workstation) else Result(false, anonymous = true)
         }
         val entry = users.entries.firstOrNull { it.key.equals(user, ignoreCase = true) }
         if (entry == null) {
-            return if (allowGuest) Result(true, user = user, guest = true) else Result(false, user = user, reason = "unknown user")
+            return if (allowGuest) Result(true, user = user, guest = true, workstation = workstation) else Result(false, user = user, reason = "unknown user")
         }
         if (nt.size <= 24) return Result(false, user = user, reason = "NTLMv1 not allowed") // NTLMv1 は拒否
 
@@ -91,7 +94,7 @@ internal class NtlmServer(private val serverName: String, private val users: Map
             val mic = Crypto.hmacMd5(exported, negotiateMsg, challengeMsg, zeroed)
             if (!java.security.MessageDigest.isEqual(mic, msg.copyOfRange(72, 88))) return Result(false, user = user, reason = "MIC mismatch")
         }
-        return Result(true, user = entry.key, sessionKey = exported, flags = authFlags)
+        return Result(true, user = entry.key, sessionKey = exported, flags = authFlags, workstation = workstation)
     }
 
     private fun hasMic(blob: ByteArray): Boolean {

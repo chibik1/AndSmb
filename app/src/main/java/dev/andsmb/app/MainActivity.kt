@@ -75,7 +75,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import dev.andsmb.app.ui.AndSmbTheme
+import dev.andsmb.app.ui.ClientUi
+import dev.andsmb.app.ui.HomeStage
+import dev.andsmb.app.ui.Section
+import dev.andsmb.app.ui.SettingsSheet
+import dev.andsmb.app.ui.sectionFor
 import dev.andsmb.app.ui.AppCard
 import dev.andsmb.app.ui.FIcon
 import dev.andsmb.app.ui.Feather
@@ -153,12 +161,15 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     val state by SmbService.state.collectAsState()
     val log by SmbService.log.collectAsState()
     val traffic by Traffic.state.collectAsState()
+    val live by SmbService.clients.collectAsState()
     var settings by remember { mutableStateOf(Settings.load(ctx)) }
     var portText by remember { mutableStateOf(settings.port.toString()) }
     var fieldError by remember { mutableStateOf<Pair<Settings.Field, String>?>(null) }
     var storageOk by remember { mutableStateOf(hasStorageAccess(ctx)) }
     var ips by remember { mutableStateOf(SmbService.ipAddresses(ctx)) }
     var tab by rememberSaveable { mutableStateOf(Tab.SERVER) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var section by rememberSaveable { mutableStateOf<Section?>(Section.SHARE) }
 
     // 設定画面から戻ってきたら権限と IP を再確認する
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -202,7 +213,12 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
         val s = settings.copy(port = portText.toIntOrNull() ?: -1)
         val err = s.validate(ctx) ?: if (!java.io.File(s.path).isDirectory) Settings.Field.PATH to res.getString(R.string.err_folder_not_found) else null
         fieldError = err
-        if (err != null) return
+        if (err != null) {
+            // 直すべき欄が入っている区画を開いてシートを出す
+            section = sectionFor(err.first)
+            showSettings = true
+            return
+        }
         settings = s
         Settings.save(ctx, s)
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -212,6 +228,9 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     }
 
     fun errorFor(f: Settings.Field) = fieldError?.takeIf { it.first == f }?.second
+
+    val ip = ips.firstOrNull()
+    val shownPort = if (state.running) state.port else settings.port
 
     Box(
         Modifier
@@ -226,6 +245,7 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { Lockup() }
                     ThemeButton(mode, onModeChange)
+                    SettingsButton { showSettings = true }
                 }
                 TabBar(
                     tabs = listOf(
@@ -237,46 +257,101 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
                     onSelect = { tab = Tab.entries[it] },
                 )
             }
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = Space.s4, end = Space.s4, top = Space.s1, bottom = Space.s6),
-                verticalArrangement = Arrangement.spacedBy(Space.s3),
-            ) {
+
+            // 真ん中。サーバー画面は動かさず、通信量とログだけスクロールする
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    Tab.SERVER -> {
-                        if (!storageOk) PermissionNotice(onAllow = { requestStorage() })
-
-                        StatusCard(state, settings, ips, traffic.connections, onCopy = { copyToClipboard(ctx, it) })
-
-                        if (state.running) {
-                            PrimaryButton(stringResource(R.string.server_stop), Feather.square, onClick = { SmbService.stop(ctx) }, danger = true)
-                        } else {
-                            PrimaryButton(stringResource(R.string.server_start), Feather.play, onClick = { startServer() }, enabled = storageOk)
-                        }
-                        state.error?.let { if (!state.running) Text(stringResource(R.string.error_prefix, it), style = Type.bodySm, color = c.danger) }
-
-                        Spacer(Modifier.height(Space.s6 - Space.s3))
-                        SectionTitle(stringResource(R.string.section_settings), Feather.share2)
-                        SettingsFields(
-                            settings = settings,
-                            portText = portText,
-                            editable = !state.running,
-                            errorFor = ::errorFor,
-                            onChange = { settings = it; fieldError = null },
-                            onPortChange = { portText = it.filter(Char::isDigit).take(5); fieldError = null },
-                            onPickFolder = { folderPicker.launch(null) },
-                        )
-                    }
-                    Tab.TRAFFIC -> {
+                    Tab.SERVER -> HomeStage(
+                        running = state.running,
+                        ip = ip,
+                        port = shownPort,
+                        clients = live.map { ClientUi(it.address, it.name, it.address, it.connectedAt, it.rxRate, it.txRate) },
+                        onCopyAddress = { if (ip != null) copyToClipboard(ctx, "$ip:$shownPort") },
+                        modifier = Modifier.padding(horizontal = Space.s3),
+                    )
+                    Tab.TRAFFIC -> ScrollTab {
                         TodayCard(traffic, state.running)
                         WeekCard(traffic)
                     }
-                    Tab.LOG -> LogCard(log)
+                    Tab.LOG -> ScrollTab { LogCard(log) }
+                }
+            }
+
+            // 一番下に固定: 許可のお知らせ・エラー・開始/停止
+            Column(
+                Modifier.fillMaxWidth().padding(start = Space.s4, end = Space.s4, top = Space.s2, bottom = Space.s4),
+                verticalArrangement = Arrangement.spacedBy(Space.s2),
+            ) {
+                if (!storageOk) PermissionNotice(onAllow = { requestStorage() })
+                state.error?.let { if (!state.running) Text(stringResource(R.string.error_prefix, it), style = Type.bodySm, color = c.danger) }
+                if (state.running) {
+                    PrimaryButton(stringResource(R.string.server_stop), Feather.stopFilled, onClick = { SmbService.stop(ctx) }, danger = true)
+                } else {
+                    PrimaryButton(stringResource(R.string.server_start), Feather.playFilled, onClick = { startServer() }, enabled = storageOk)
                 }
             }
         }
+
+        if (showSettings) {
+            SettingsSheet(
+                settings = settings,
+                portText = portText,
+                editable = !state.running,
+                errorFor = ::errorFor,
+                onChange = { settings = it; fieldError = null },
+                onPortChange = { portText = it.filter(Char::isDigit).take(5); fieldError = null },
+                onPickFolder = { folderPicker.launch(null) },
+                ip = ip,
+                bonjourName = state.bonjourName?.takeIf { state.running },
+                port = shownPort,
+                expanded = section,
+                onExpand = { section = it },
+                onCopy = { copyToClipboard(ctx, it) },
+                onDismiss = { showSettings = false },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScrollTab(content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = Space.s4, end = Space.s4, top = Space.s1, bottom = Space.s3),
+        verticalArrangement = Arrangement.spacedBy(Space.s3),
+    ) { content() }
+}
+
+/** 右上の設定ボタン。見た目は 40dp の丸枠、押せる範囲は 48dp。 */
+@Composable
+private fun SettingsButton(onClick: () -> Unit) {
+    val c = colors
+    val desc = stringResource(R.string.settings_open)
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = desc, onClick = onClick)
+            .semantics { contentDescription = desc },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(40.dp).border(1.5.dp, c.borderField, CircleShape), contentAlignment = Alignment.Center) {
+            FIcon(Feather.sliders, c.ink)
+        }
+    }
+}
+
+/** 地球のアイコン (右のボタンと同じ丸枠) + 「AndSmb」 */
+@Composable
+private fun Lockup() {
+    val c = colors
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+        Box(Modifier.size(40.dp).border(1.5.dp, c.borderField, CircleShape), contentAlignment = Alignment.Center) {
+            FIcon(Feather.globe, c.accent)
+        }
+        Text("AndSmb", style = Type.display, color = c.ink)
     }
 }
 
@@ -299,26 +374,6 @@ private fun LogCard(log: List<String>) {
     }
 }
 
-/** アイコン 40dp + 「AndSmb」。ダークでは黒い角丸に枠を付けて背景に埋もれないようにする。 */
-@Composable
-private fun Lockup() {
-    val c = colors
-    val dark = isDark
-    val shape = RoundedCornerShape(9.dp)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(shape)
-                .background(androidx.compose.ui.graphics.Color(0xFF0B0B0C))
-                .then(if (dark) Modifier.border(1.5.dp, c.borderField, shape) else Modifier),
-        ) {
-            Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.fillMaxSize())
-        }
-        Text("AndSmb", style = Type.display, color = c.ink)
-    }
-}
-
 @Composable
 private fun PermissionNotice(onAllow: () -> Unit) {
     val c = colors
@@ -331,76 +386,6 @@ private fun PermissionNotice(onAllow: () -> Unit) {
         Text(stringResource(R.string.permission_body), style = Type.body, color = c.ink)
         Spacer(Modifier.height(Space.s3))
         SecondaryButton(stringResource(R.string.permission_allow), onAllow)
-    }
-}
-
-@Composable
-private fun StatusCard(state: SmbService.State, s: Settings, ips: List<String>, connections: Int, onCopy: (String) -> Unit) {
-    val c = colors
-    AppCard {
-        if (state.running) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-                FIcon(Feather.checkCircle, c.success)
-                Text(stringResource(R.string.status_running), style = Type.headline, color = c.success, modifier = Modifier.weight(1f))
-                // 台数は見出しの右端に置き、増減で下のチップ列が押し出されないようにする
-                InfoChip(pluralStringResource(R.plurals.chip_connections, connections, connections), Feather.users)
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-                FIcon(Feather.square, c.inkMuted)
-                Text(stringResource(R.string.status_stopped), style = Type.headline, color = c.inkMuted)
-            }
-        }
-
-        // 状態のチップ: 書き込み可否・ポート
-        Spacer(Modifier.height(Space.s3))
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-            val fit = Modifier.weight(1f, fill = false)
-            InfoChip(stringResource(if (s.readOnly) R.string.chip_read_only else R.string.chip_read_write), if (s.readOnly) Feather.eye else Feather.folder, modifier = fit)
-            InfoChip(stringResource(R.string.chip_port, if (state.running) state.port else s.port), Feather.hash, modifier = fit)
-        }
-
-        if (ips.isEmpty()) {
-            Spacer(Modifier.height(Space.s3))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-                FIcon(Feather.wifiOff, c.danger)
-                Text(stringResource(R.string.no_network), style = Type.label, color = c.danger)
-            }
-            Spacer(Modifier.height(Space.s2))
-            Text(stringResource(R.string.connect_wifi), style = Type.body, color = c.ink)
-        }
-        val port = if (state.running) state.port else s.port
-        // Bonjour 名で接続すると、Finder の「ネットワーク」で公開名と同じ 1 項目にまとまる
-        val bonjour = state.bonjourName?.takeIf { state.running }
-        if (bonjour != null && ips.isNotEmpty()) {
-            Address(stringResource(R.string.address_mac), "smb://${Uri.encode(bonjour)}._smb._tcp.local/${s.shareName}", onCopy)
-        }
-        for (ip in ips) {
-            Address(stringResource(if (bonjour != null) R.string.address_ip else R.string.address_mac), "smb://$ip:$port/${s.shareName}", onCopy)
-            Address(stringResource(R.string.address_windows), "net use Z: \\\\$ip\\${s.shareName} /TCPPORT:$port /USER:${s.user}", onCopy)
-        }
-    }
-}
-
-@Composable
-private fun Address(label: String, value: String, onCopy: (String) -> Unit) {
-    val c = colors
-    Spacer(Modifier.height(Space.s3))
-    Text(label, style = Type.bodySm, color = c.inkMuted)
-    Spacer(Modifier.height(Space.s1))
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(Radius.sm))
-            .background(c.surfaceTile)
-            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.copy_address)) { onCopy(value) }
-            .padding(horizontal = Space.s3, vertical = Space.s2),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Space.s2),
-    ) {
-        Text(value, style = Type.mono, color = c.ink, modifier = Modifier.weight(1f))
-        FIcon(Feather.copy, c.inkMuted)
     }
 }
 
@@ -475,38 +460,3 @@ private fun WeekCard(t: TrafficSnapshot) {
     }
 }
 
-@Composable
-private fun SettingsFields(
-    settings: Settings,
-    portText: String,
-    editable: Boolean,
-    errorFor: (Settings.Field) -> String?,
-    onChange: (Settings) -> Unit,
-    onPortChange: (String) -> Unit,
-    onPickFolder: () -> Unit,
-) {
-    LabeledField(stringResource(R.string.field_share_name), settings.shareName, { onChange(settings.copy(shareName = it)) }, Feather.share2, editable, error = errorFor(Settings.Field.SHARE))
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-        LabeledField(
-            stringResource(R.string.field_folder), settings.path, { onChange(settings.copy(path = it)) }, Feather.folder, editable,
-            modifier = Modifier.weight(1f),
-        )
-        Box(Modifier.padding(bottom = 2.dp)) { SecondaryButton(stringResource(R.string.field_choose), onPickFolder, enabled = editable) }
-    }
-    errorFor(Settings.Field.PATH)?.let { Text(stringResource(R.string.error_prefix, it), style = Type.caption, color = colors.danger) }
-    LabeledField(stringResource(R.string.field_user), settings.user, { onChange(settings.copy(user = it.trim())) }, Feather.user, editable, error = errorFor(Settings.Field.USER))
-    LabeledField(
-        stringResource(R.string.field_password), settings.password, { onChange(settings.copy(password = it)) }, Feather.lock, editable,
-        error = errorFor(Settings.Field.PASSWORD), password = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-    )
-    LabeledField(
-        stringResource(R.string.field_port), portText, onPortChange, Feather.hash, editable, error = errorFor(Settings.Field.PORT),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-    )
-    AppCard(padding = 0.dp, elevated = false) {
-        Box(Modifier.padding(horizontal = Space.s4)) {
-            ToggleRow(stringResource(R.string.toggle_read_only), Feather.eye, settings.readOnly, { onChange(settings.copy(readOnly = it)) }, editable)
-        }
-    }
-}
