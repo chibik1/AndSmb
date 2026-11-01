@@ -50,7 +50,7 @@
     <string name="err_user_required">Enter a username</string>
     <string name="err_password_short">Use at least %1$d characters for the password</string>
     <string name="err_port_range">Use a port number from 1024 to 65535</string>
-    <string name="err_folder_internal_only">Choose a folder on internal storage (SD cards are not supported)</string>
+    <string name="err_folder_unsupported">This folder can\'t be shared (SD cards and USB drives need Android 11 or later)</string>
     <string name="err_folder_not_found">Folder not found</string>
 
     <!-- Traffic tab -->
@@ -76,6 +76,7 @@
     <string name="log_start_failed">Failed to start</string>
     <string name="stopped_wifi_lost">Stopped because Wi-Fi was disconnected</string>
     <string name="stopped_ip_changed">Stopped because the IP address changed</string>
+    <string name="stopped_storage_removed">Stopped because the SD card or USB drive with the shared folder was removed</string>
     <string name="log_bonjour_ok">Bonjour published: %1$s</string>
     <string name="log_bonjour_fail">Bonjour publishing failed (%1$d)</string>
 

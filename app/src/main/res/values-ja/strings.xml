@@ -48,7 +48,7 @@
     <string name="err_user_required">ユーザー名を入力してください</string>
     <string name="err_password_short">パスワードは%1$d文字以上にしてください</string>
     <string name="err_port_range">1024〜65535 の番号にしてください</string>
-    <string name="err_folder_internal_only">内部ストレージのフォルダを選んでください (SD カードは未対応)</string>
+    <string name="err_folder_unsupported">このフォルダは共有できません (SD カード・USB メモリは Android 11 以降)</string>
     <string name="err_folder_not_found">フォルダが見つかりません</string>
 
     <!-- Traffic tab -->
@@ -74,6 +74,7 @@
     <string name="log_start_failed">起動に失敗しました</string>
     <string name="stopped_wifi_lost">Wi-Fi が切断されたため停止しました</string>
     <string name="stopped_ip_changed">IP アドレスが変わったため停止しました</string>
+    <string name="stopped_storage_removed">共有フォルダのある SD カード・USB メモリが外されたため停止しました</string>
     <string name="log_bonjour_ok">Bonjour 公開: %1$s</string>
     <string name="log_bonjour_fail">Bonjour 公開失敗 (%1$d)</string>
 

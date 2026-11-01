@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
@@ -136,13 +137,21 @@ private fun hasStorageAccess(ctx: Context): Boolean =
     if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
     else ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
-/** SAF のツリー URI (内部ストレージのみ) を実パスに変換する */
-private fun treeUriToPath(uri: Uri): String? {
+/**
+ * SAF のツリー URI を実パスに変換する。
+ * 内部ストレージに加え、Android 11 以降なら SD カードや USB メモリも (全ファイルへのアクセス権で直接読み書きできるため)。
+ * それより前の Android では SD カードにファイルの API で書き込めないので選ばせない。
+ */
+private fun treeUriToPath(ctx: Context, uri: Uri): String? {
     val docId = DocumentsContract.getTreeDocumentId(uri)
     val (volume, rel) = docId.split(":", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
-    if (volume != "primary") return null
-    val root = Environment.getExternalStorageDirectory().absolutePath
-    return if (rel.isEmpty()) root else "$root/$rel"
+    val root = when {
+        volume == "primary" -> Environment.getExternalStorageDirectory()
+        Build.VERSION.SDK_INT >= 30 -> ctx.getSystemService(StorageManager::class.java).storageVolumes
+            .firstOrNull { it.uuid.equals(volume, ignoreCase = true) }?.directory
+        else -> null
+    } ?: return null
+    return if (rel.isEmpty()) root.absolutePath else "${root.absolutePath}/$rel"
 }
 
 private fun copyToClipboard(ctx: Context, text: String) {
@@ -192,8 +201,8 @@ private fun MainScreen(mode: ThemeMode, onModeChange: (ThemeMode) -> Unit) {
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
-            val path = treeUriToPath(uri)
-            if (path == null) fieldError = Settings.Field.PATH to res.getString(R.string.err_folder_internal_only)
+            val path = treeUriToPath(ctx, uri)
+            if (path == null) fieldError = Settings.Field.PATH to res.getString(R.string.err_folder_unsupported)
             else { settings = settings.copy(path = path); fieldError = null }
         }
     }

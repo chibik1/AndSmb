@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.LinkProperties
@@ -22,6 +24,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import dev.andsmb.smb.SmbConfig
 import dev.andsmb.smb.SmbLogger
 import dev.andsmb.smb.SmbServer
@@ -127,6 +130,7 @@ class SmbService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var nsdListener: NsdManager.RegistrationListener? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var storageReceiver: BroadcastReceiver? = null
     private val handler = Handler(Looper.getMainLooper())
     private var lastReceived = 0L
     private var lastSent = 0L
@@ -248,6 +252,7 @@ class SmbService : Service() {
             _state.value = State(running = true, port = s.port)
             registerNsd(config.serverName, s.port)
             watchNetwork(network, address)
+            watchStorage(File(s.path))
             lastReceived = 0; lastSent = 0
             handler.post(trafficTick)
             prevClient.clear(); prevClientAt = 0L
@@ -268,14 +273,15 @@ class SmbService : Service() {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AndSmb:server").apply { setReferenceCounted(false); acquire() }
     }
 
+    private fun stopFor(reason: String) = handler.post {
+        if (server == null) return@post
+        appendLog(reason)
+        _state.value = _state.value.copy(error = reason)
+        stopSelf()
+    }
+
     /** 待ち受けている Wi-Fi が切れたりアドレスが変わったりしたら、サーバーを止める */
     private fun watchNetwork(network: Network, address: Inet4Address) {
-        fun stopFor(reason: String) = handler.post {
-            if (server == null) return@post
-            appendLog(reason)
-            _state.value = _state.value.copy(error = reason)
-            stopSelf()
-        }
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(n: Network) {
                 if (n == network) stopFor(getString(R.string.stopped_wifi_lost))
@@ -291,6 +297,26 @@ class SmbService : Service() {
             .build()
         getSystemService(ConnectivityManager::class.java).registerNetworkCallback(req, cb)
         networkCallback = cb
+    }
+
+    /** 共有フォルダのある SD カードや USB メモリが外されたら、サーバーを止める */
+    private fun watchStorage(root: File) {
+        val path = root.absolutePath
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val mount = intent.data?.path ?: return
+                if (path == mount || path.startsWith("$mount/")) stopFor(getString(R.string.stopped_storage_removed))
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_MEDIA_EJECT)
+            addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+            addAction(Intent.ACTION_MEDIA_BAD_REMOVAL)
+            addAction(Intent.ACTION_MEDIA_REMOVED)
+            addDataScheme("file")
+        }
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        storageReceiver = receiver
     }
 
     /** Bonjour (_smb._tcp) で公開して Mac の Finder サイドバーに出るようにする */
@@ -331,6 +357,8 @@ class SmbService : Service() {
             try { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(cb) } catch (_: Exception) {}
         }
         networkCallback = null
+        storageReceiver?.let { r -> try { unregisterReceiver(r) } catch (_: Exception) {} }
+        storageReceiver = null
         server?.stop()
         server = null
         wifiLock?.release()
