@@ -1,0 +1,66 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDSMB_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Secret ANDSMB_KEYSTORE_BASE64 is not set"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDSMB_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "ANDSMB_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+          echo "ANDSMB_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        env:
+          ANDSMB_KEYSTORE_PASSWORD: ${{ secrets.ANDSMB_KEYSTORE_PASSWORD }}
+          ANDSMB_KEY_ALIAS: ${{ secrets.ANDSMB_KEY_ALIAS }}
+          ANDSMB_KEY_PASSWORD: ${{ secrets.ANDSMB_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease
+
+      - name: Rename APK
+        run: |
+          NAME="AndSmb-${ANDSMB_VERSION_NAME:-${GITHUB_SHA::7}}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$NAME"
+          echo "APK_NAME=$NAME" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK_NAME }}
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_NAME }}
+          generate_release_notes: true

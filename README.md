@@ -100,3 +100,26 @@ APK は `app/build/outputs/apk/debug/app-debug.apk`。
 - パスワードは 8 文字以上。同じ IP から 15 分以内に 5 回認証に失敗すると、その IP を 5 分間締め出す (失敗のたびに 1 秒待たせる)。Finder が最初に試す匿名ログインは数えない
 - 共有フォルダ内のシンボリックリンクは、リンク先が共有フォルダの中にあるものだけ使える (外を指すリンクは一覧に出ず、開けない)
 - 同時接続は 32 本まで。接続後 30 秒以内に認証しない接続と、フレーム本体が 30 秒以内に届かない接続は切る
+
+## リリース APK の配布
+
+`v*` タグを push すると GitHub Actions (`.github/workflows/release.yml`) が署名済み APK をビルドし、GitHub Releases に添付する。Actions タブから手動実行 (`workflow_dispatch`) するとリリースは作らず、Artifacts に APK だけ残す。
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+- versionName はタグ名 (`v` を除く)、versionCode はワークフローの実行番号
+- 事前にリポジトリの Settings → Secrets and variables → Actions に次の 4 つを登録する
+  - `ANDSMB_KEYSTORE_BASE64`: keystore を `base64 -i release.jks` した文字列
+  - `ANDSMB_KEYSTORE_PASSWORD` / `ANDSMB_KEY_ALIAS` / `ANDSMB_KEY_PASSWORD`
+- ローカルで署名付きビルドするときは、リポジトリ直下に `keystore.properties` (git 管理外) を置く
+
+```properties
+storeFile=/path/to/release.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+- keystore を失くすと、同じアプリとして更新を配れなくなる。リポジトリの外に必ずバックアップする
