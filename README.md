@@ -1,7 +1,7 @@
 # AndSmb
 
 Android 端末を SMB (Windows ファイル共有) サーバーにするアプリ。root 不要。
-同じ Wi-Fi にある Mac・iPhone・Windows から、スマホのフォルダを開いてファイルを読み書きできる。
+同じ Wi-Fi にある Mac・iPhone・Windows・Android から、スマホのフォルダを開いてファイルを読み書きできる。
 
 ## ダウンロード
 
