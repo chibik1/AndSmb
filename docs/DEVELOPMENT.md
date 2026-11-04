@@ -71,6 +71,7 @@ APK は `app/build/outputs/apk/debug/app-debug.apk`。
 - macOS → Pixel 4a (Android 13) 実機に Wi-Fi 直接接続: SMB 3.1.1 + AES-CMAC 署名、読み書き・日本語名・名前変更・削除・50MB 往復 (SHA1 一致)、Bonjour で `PIXEL4A` として検出
   - 実測: アップロード 約 6.5 MB/s、ダウンロード 約 10 MB/s (50MB ファイル)
 - Windows 11 → Pixel 4a 実機: `net use Z: \\<IP>\android /TCPPORT:4450 /USER:android` でマウントできた
+- Android → アプリ: 「ファイルマネージャー＋」と Samsung「マイファイル」から接続できた
 
 ## リリース APK の配布
 
