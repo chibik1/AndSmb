@@ -5,7 +5,7 @@ Android 端末を SMB (Windows ファイル共有) サーバーにするアプ�
 
 ## ダウンロード
 
-[Releases](https://github.com/chibik1/AndSmb/releases/latest) から最新の `AndSmb-x.y.z.apk` をダウンロードしてインストールする。
+[Releases](https://github.com/chibik1/AndSmb/releases/latest) から最新の `AndSmb-[version].apk` をダウンロードしてインストールする。
 
 - Android 8.0 以降
 - 初めてのときは「提供元不明のアプリ」のインストールを許可する
